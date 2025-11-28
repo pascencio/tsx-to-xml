@@ -1,0 +1,11 @@
+{
+    "name": "tsx-to-xml",
+    "devDependencies": {
+        "esbuild": "^0.21.0",
+        "typescript": "^5.4.0"
+    },
+    "scripts": {
+        "build": "node build.js",
+        "start": "node dist/index.js"
+    }
+}
