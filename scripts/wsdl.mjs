@@ -21,7 +21,6 @@ export const loadXsd = (wsdlFile, xsdPath) => {
 const fillObject = (object, namespaces, complexTypes) => {
     for (const item of Object.keys(object)) {
         const value = object[item]
-        console.log('value', value)
         if(complexTypes !== undefined && complexTypes[value] !== undefined) {
             object[item] = fillObject(complexTypes[value], namespaces, complexTypes)
         }
@@ -29,13 +28,18 @@ const fillObject = (object, namespaces, complexTypes) => {
     return object;
 }
 
-export const sequenceToObject = (node, namespaces, complexTypes) => {
-    const object = {};
+export const sequenceToObject = (node, namespaces, complexTypes, targetNamespace) => {
     const elementNode = getElementNode(node)
     if (Array.isArray(elementNode)) {
+        const object = {};
+        // Establecer el namespace del objeto al targetNamespace del schema
+        if (targetNamespace !== undefined) {
+            object["$namespace"] = targetNamespace;
+        }
         for (const node of elementNode) {
             const [prefix, name] = node.type.split(':')
-            const type = namespaces.get(prefix) !== undefined ? namespaces.get(prefix) + ':' + name : namespaces.get('targetNamespace') + ':' + name
+            const namespace = namespaces.get(prefix) !== undefined ? namespaces.get(prefix) : namespaces.get('targetNamespace')
+            const type = namespace + ':' + name
             if (complexTypes !== undefined) {
                 const complexTypeObject = complexTypes[type]
                 if(complexTypeObject !== undefined && typeof complexTypeObject === 'object') {
@@ -47,9 +51,16 @@ export const sequenceToObject = (node, namespaces, complexTypes) => {
                 object[node.name] = type
             }
         }
+        return object;
     } else {
+        const object = {};
+        // Establecer el namespace del objeto al targetNamespace del schema
+        if (targetNamespace !== undefined) {
+            object["$namespace"] = targetNamespace;
+        }
         const [prefix, name] = elementNode.type.split(':')
-        const type = namespaces.get(prefix) !== undefined ? namespaces.get(prefix) + ':' + name : namespaces.get('targetNamespace') + ':' + name
+        const namespace = namespaces.get(prefix) !== undefined ? namespaces.get(prefix) : namespaces.get('targetNamespace')
+        const type = namespace + ':' + name
         if (complexTypes !== undefined) {
             const complexTypeObject = complexTypes[type]
             if(complexTypeObject !== undefined && typeof complexTypeObject === 'object') {
@@ -60,8 +71,8 @@ export const sequenceToObject = (node, namespaces, complexTypes) => {
         } else {
             object[elementNode.name] = type
         }
+        return object;
     }
-    return object;
 }
 
 export const getSequenceNode = (node) => {
@@ -94,20 +105,25 @@ export const getComplexTypeNode = (node) => {
     return node[complexTypeField]
 }
 
-export const complexTypeToObject = (node, namespaces, complexTypes) => {
+export const complexTypeToObject = (node, namespaces, complexTypes, targetNamespace) => {
     if (Array.isArray(node)) {
         const sequenceObject = {};
         for (const item of node) {
             const sequenceNode = getSequenceNode(item)
             if (sequenceNode !== undefined) {
-                sequenceObject[item.name] = sequenceToObject(sequenceNode, namespaces, complexTypes)
+                sequenceObject[item.name] = sequenceToObject(sequenceNode, namespaces, complexTypes, targetNamespace)
             }
         }
         return sequenceObject;
     } else {
         const sequenceNode = getSequenceNode(node)
         if (sequenceNode !== undefined) {
-            return sequenceToObject(sequenceNode, namespaces, complexTypes);
+            const result = sequenceToObject(sequenceNode, namespaces, complexTypes, targetNamespace);
+            // Establecer el namespace del objeto complejo al targetNamespace del schema
+            if (targetNamespace !== undefined) {
+                result["$namespace"] = targetNamespace;
+            }
+            return result;
         }
         console.log('node', node)
         throw new Error('No sequence node found')
@@ -138,20 +154,20 @@ export const complexTypesFromSchema = (wsdlFile, node, namespaces) => {
     if (complexTypeNode !== undefined) {
         if (Array.isArray(complexTypeNode)) {
             for (const item of complexTypeNode) {
-                object[targetNamespace + ':' + item.name] = complexTypeToObject(item, currentNamespaces)
+                object[targetNamespace + ':' + item.name] = complexTypeToObject(item, currentNamespaces, object, targetNamespace)
             }
         } else {
-            object[targetNamespace + ':' + complexTypeNode.name] = complexTypeToObject(complexTypeNode, currentNamespaces)
+            object[targetNamespace + ':' + complexTypeNode.name] = complexTypeToObject(complexTypeNode, currentNamespaces, object, targetNamespace)
         }
     }
     const elementNode = getElementNode(node)
     if (elementNode !== undefined && getSequenceNode(elementNode) !== undefined) {
         if (Array.isArray(elementNode)) {
             for (const item of elementNode) {
-                object[targetNamespace + ':' + item.name] = complexTypeToObject(item, currentNamespaces)
+                object[targetNamespace + ':' + item.name] = complexTypeToObject(item, currentNamespaces, object, targetNamespace)
             }
         } else {
-            object[targetNamespace + ':' + elementNode.name] = complexTypeToObject(elementNode, currentNamespaces)
+            object[targetNamespace + ':' + elementNode.name] = complexTypeToObject(elementNode, currentNamespaces, object, targetNamespace)
         }
     }
     return object;
@@ -163,13 +179,13 @@ export const schemaToObject = (node, namespaces, complexTypes) => {
     if (Array.isArray(elementNode)) {
         for (const item of elementNode) {
             const complexTypeNode = getComplexTypeNode(item)
-            object[item.type ?? item.name] = complexTypeToObject(complexTypeNode, namespaces, complexTypes)
+            object[item.type ?? item.name] = complexTypeToObject(complexTypeNode, namespaces, complexTypes, node.targetNamespace)
         }
     } else {
         const complexTypeNode = getComplexTypeNode(node)
-        object[elementNode.type ?? elementNode.name] = complexTypeToObject(complexTypeNode, namespaces, complexTypes)
+        object[elementNode.type ?? elementNode.name] = complexTypeToObject(complexTypeNode, namespaces, complexTypes, node.targetNamespace)
     }
-    object.targetNamespace = node.targetNamespace
+    object["$namespace"] = node.targetNamespace
     return object;
 }
 
