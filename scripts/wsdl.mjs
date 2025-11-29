@@ -204,6 +204,42 @@ export const getImportNode = (node) => {
     return node[importField]
 }
 
+export const getMessageNode = (node) => {
+    const messageField = Object.keys(node).find(objectField => objectField.match(/([a-zA-z0-9]*:)?message/));
+    return node[messageField]
+}
+
+export const getPortTypeNode = (node) => {
+    const portTypeField = Object.keys(node).find(objectField => objectField.match(/([a-zA-z0-9]*:)?portType/));
+    return node[portTypeField]
+}
+
+export const getOperationNode = (node) => {
+    const operationField = Object.keys(node).find(objectField => objectField.match(/([a-zA-z0-9]*:)?operation/));
+    return node[operationField]
+}
+
+export const getInputNode = (node) => {
+    const inputField = Object.keys(node).find(objectField => objectField.match(/([a-zA-z0-9]*:)?input/));
+    return node[inputField]
+}
+
+export const getPartNode = (node) => {
+    const partField = Object.keys(node).find(objectField => objectField.match(/([a-zA-z0-9]*:)?part/));
+    return node[partField]
+}
+
+export const getRequestTypeFromDefinitions = (definitionsNode, schemaObject) => {
+    const portTypeNode = getPortTypeNode(definitionsNode)
+    const operationNode = getOperationNode(portTypeNode)
+    const inputNode = getInputNode(operationNode)
+    const messageNode = getMessageNode(definitionsNode)
+    const inputMessageNode = messageNode.find(item => inputNode.message.endsWith(item.name))
+    const partNode = getPartNode(inputMessageNode)
+    const requestType = Object.keys(schemaObject).find(item => partNode.element.endsWith(item))
+    return requestType
+}
+
 export const getNamespacesFromNode = (node) => {
     const namespaces = new Map();
     if(node.targetNamespace !== undefined) {

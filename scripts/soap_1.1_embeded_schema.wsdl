@@ -1,17 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<definitions 
-    xmlns="http://schemas.xmlsoap.org/wsdl/"
-    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
-    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-    targetNamespace="http://example.com/inline-types-service">
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:tns="http://example.com/inline-types-service" targetNamespace="http://example.com/inline-types-service">
 
   <types>
-    <xsd:schema 
-        xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-        targetNamespace="http://example.com/inline-types"
-        elementFormDefault="qualified">
-
-      <!-- ELEMENTO GLOBAL -->
+    <xsd:schema targetNamespace="http://example.com/inline-types" elementFormDefault="qualified">
       <xsd:element name="GetPersonRequest">
         <xsd:complexType>
           <xsd:sequence>
@@ -20,8 +14,6 @@
           </xsd:sequence>
         </xsd:complexType>
       </xsd:element>
-
-      <!-- ELEMENTO GLOBAL -->
       <xsd:element name="GetPersonResponse">
         <xsd:complexType>
           <xsd:sequence>
@@ -29,8 +21,6 @@
           </xsd:sequence>
         </xsd:complexType>
       </xsd:element>
-
-      <!-- COMPLEX TYPE GLOBAL -->
       <xsd:complexType name="Person">
         <xsd:sequence>
           <xsd:element name="Id" type="xsd:string"/>
@@ -39,8 +29,6 @@
           <xsd:element name="Address" type="tns:Address" minOccurs="0"/>
         </xsd:sequence>
       </xsd:complexType>
-
-      <!-- OTRO COMPLEX TYPE -->
       <xsd:complexType name="Address">
         <xsd:sequence>
           <xsd:element name="Street" type="xsd:string"/>
@@ -48,8 +36,40 @@
           <xsd:element name="ZipCode" type="xsd:string"/>
         </xsd:sequence>
       </xsd:complexType>
-
     </xsd:schema>
   </types>
 
+  <message name="GetPersonInput">
+    <part name="parameters" element="tns:GetPersonRequest"/>
+  </message>
+
+  <message name="GetPersonOutput">
+    <part name="parameters" element="tns:GetPersonResponse"/>
+  </message>
+
+  <portType name="PersonServicePortType">
+    <operation name="GetPerson">
+      <input message="tns:GetPersonInput"/>
+      <output message="tns:GetPersonOutput"/>
+    </operation>
+  </portType>
+
+  <binding name="PersonServiceBinding" type="tns:PersonServicePortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="GetPerson">
+      <soap:operation soapAction="http://example.com/GetPerson"/>
+      <input>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+    </operation>
+  </binding>
+
+  <service name="PersonService">
+    <port name="PersonServicePort" binding="tns:PersonServiceBinding">
+      <soap:address location="http://localhost:8080/PersonService"/>
+    </port>
+  </service>
 </definitions>

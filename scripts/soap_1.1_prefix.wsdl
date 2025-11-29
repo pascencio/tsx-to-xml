@@ -5,34 +5,86 @@
     xmlns:tns="http://example.com/customer-service"
     xmlns:cus="http://example.com/schema/customer"
     xmlns:com="http://example.com/schema/common"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="http://example.com/customer-service">
 
-  <wsdl:types>
-    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-               targetNamespace="http://example.com/customer-service"
-               elementFormDefault="qualified">
+    <!-- ========================= -->
+    <!--          TYPES            -->
+    <!-- ========================= -->
+    <wsdl:types>
+        <xs:schema
+            xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            targetNamespace="http://example.com/customer-service"
+            elementFormDefault="qualified">
 
-      <xs:import namespace="http://example.com/schema/customer" schemaLocation="customer.xsd"/>
-      <xs:import namespace="http://example.com/schema/common" schemaLocation="common.xsd"/>
+            <xs:import namespace="http://example.com/schema/customer" schemaLocation="customer.xsd"/>
+            <xs:import namespace="http://example.com/schema/common" schemaLocation="common.xsd"/>
 
-      <xs:element name="GetCustomerRequest">
-        <xs:complexType>
-          <xs:sequence>
-            <xs:element name="CustomerId" type="xs:string"/>
-            <xs:element name="Auth" type="com:AuthHeader"/>
-          </xs:sequence>
-        </xs:complexType>
-      </xs:element>
+            <xs:element name="GetCustomerRequest">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="CustomerId" type="xs:string"/>
+                        <xs:element name="Auth" type="com:AuthHeader"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
 
-      <xs:element name="GetCustomerResponse">
-        <xs:complexType>
-          <xs:sequence>
-            <xs:element name="Customer" type="cus:Customer"/>
-          </xs:sequence>
-        </xs:complexType>
-      </xs:element>
+            <xs:element name="GetCustomerResponse">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Customer" type="cus:Customer"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
 
-    </xs:schema>
-  </wsdl:types>
+        </xs:schema>
+    </wsdl:types>
+
+    <!-- ========================= -->
+    <!--         MESSAGES          -->
+    <!-- ========================= -->
+    <wsdl:message name="GetCustomerInput">
+        <wsdl:part name="parameters" element="tns:GetCustomerRequest"/>
+    </wsdl:message>
+
+    <wsdl:message name="GetCustomerOutput">
+        <wsdl:part name="parameters" element="tns:GetCustomerResponse"/>
+    </wsdl:message>
+
+    <!-- ========================= -->
+    <!--        PORT TYPE          -->
+    <!-- ========================= -->
+    <wsdl:portType name="CustomerServicePortType">
+        <wsdl:operation name="GetCustomer">
+            <wsdl:input message="tns:GetCustomerInput"/>
+            <wsdl:output message="tns:GetCustomerOutput"/>
+        </wsdl:operation>
+    </wsdl:portType>
+
+    <!-- ========================= -->
+    <!--          BINDING          -->
+    <!-- ========================= -->
+    <wsdl:binding name="CustomerServiceBinding" type="tns:CustomerServicePortType">
+        <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+
+        <wsdl:operation name="GetCustomer">
+            <soap:operation soapAction="http://example.com/customer-service/GetCustomer"/>
+            <wsdl:input>
+                <soap:body use="literal"/>
+            </wsdl:input>
+            <wsdl:output>
+                <soap:body use="literal"/>
+            </wsdl:output>
+        </wsdl:operation>
+    </wsdl:binding>
+
+    <!-- ========================= -->
+    <!--          SERVICE          -->
+    <!-- ========================= -->
+    <wsdl:service name="CustomerService">
+        <wsdl:port name="CustomerServicePort" binding="tns:CustomerServiceBinding">
+            <soap:address location="http://localhost:8080/CustomerService"/>
+        </wsdl:port>
+    </wsdl:service>
 
 </wsdl:definitions>

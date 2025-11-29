@@ -6,6 +6,7 @@ import {
     getNamespacesFromNode,
     complexTypesFromSchema,
     schemaToObject,
+    getRequestTypeFromDefinitions,
 } from "./wsdl.mjs";
 
 const WSDL_PATH = process.argv[2];
@@ -19,8 +20,10 @@ const definitionsNamespaces = getNamespacesFromNode(definitionsNode)
 const schemaNamespaces = getNamespacesFromNode(schemaNode)
 const namespaces = new Map([...definitionsNamespaces, ...schemaNamespaces])
 const complexTypes = complexTypesFromSchema(WSDL_PATH, schemaNode, namespaces)
-console.log('complexTypes', complexTypes)
 if (schemaNode !== undefined) {
     const schemaObject = schemaToObject(schemaNode, namespaces, complexTypes)
-    console.log(JSON.stringify(schemaObject, null, 2))
+    const requestType = getRequestTypeFromDefinitions(definitionsNode, schemaObject)
+    console.log('requestType: ', requestType)
+    const requestTypeObject = schemaObject[requestType]
+    console.log('requestTypeObject: ', JSON.stringify(requestTypeObject, null, 2))
 }
