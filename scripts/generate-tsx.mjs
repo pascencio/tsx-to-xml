@@ -18,10 +18,8 @@ const schemaNode = getSchemaNode(typeNode)
 const definitionsNamespaces = getNamespacesFromNode(definitionsNode)
 const schemaNamespaces = getNamespacesFromNode(schemaNode)
 const namespaces = new Map([...definitionsNamespaces, ...schemaNamespaces])
-console.log('namespaces', namespaces)
 const complexTypes = complexTypesFromSchema(WSDL_PATH, schemaNode, namespaces)
-console.log('complexTypes', complexTypes)
 if (schemaNode !== undefined) {
     const schemaObject = schemaToObject(schemaNode, namespaces, complexTypes)
-    console.log(schemaObject)
+    console.log(JSON.stringify(schemaObject, null, 2))
 }

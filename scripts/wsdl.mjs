@@ -18,6 +18,17 @@ export const loadXsd = (wsdlFile, xsdPath) => {
     return loadXml(path.resolve(wsdlDir, xsdPath));
 }
 
+const fillObject = (object, namespaces, complexTypes) => {
+    for (const item of Object.keys(object)) {
+        const value = object[item]
+        console.log('value', value)
+        if(complexTypes !== undefined && complexTypes[value] !== undefined) {
+            object[item] = fillObject(complexTypes[value], namespaces, complexTypes)
+        }
+    }
+    return object;
+}
+
 export const sequenceToObject = (node, namespaces, complexTypes) => {
     const object = {};
     const elementNode = getElementNode(node)
@@ -26,7 +37,12 @@ export const sequenceToObject = (node, namespaces, complexTypes) => {
             const [prefix, name] = node.type.split(':')
             const type = namespaces.get(prefix) !== undefined ? namespaces.get(prefix) + ':' + name : namespaces.get('targetNamespace') + ':' + name
             if (complexTypes !== undefined) {
-                object[node.name] = complexTypes[type] ?? type
+                const complexTypeObject = complexTypes[type]
+                if(complexTypeObject !== undefined && typeof complexTypeObject === 'object') {
+                    object[node.name] = fillObject(complexTypeObject, namespaces, complexTypes)
+                } else {
+                    object[node.name] = type
+                }   
             } else {
                 object[node.name] = type
             }
@@ -35,7 +51,12 @@ export const sequenceToObject = (node, namespaces, complexTypes) => {
         const [prefix, name] = elementNode.type.split(':')
         const type = namespaces.get(prefix) !== undefined ? namespaces.get(prefix) + ':' + name : namespaces.get('targetNamespace') + ':' + name
         if (complexTypes !== undefined) {
-            object[elementNode.name] = complexTypes[type] ?? type
+            const complexTypeObject = complexTypes[type]
+            if(complexTypeObject !== undefined && typeof complexTypeObject === 'object') {
+                object[elementNode.name] = fillObject(complexTypeObject, namespaces, complexTypes)
+            } else {
+                object[elementNode.name] = type
+            }
         } else {
             object[elementNode.name] = type
         }
