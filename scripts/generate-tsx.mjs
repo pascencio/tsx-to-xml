@@ -15,11 +15,13 @@ const wsdlRoot = loadXml(WSDL_PATH);
 const definitionsNode = getDefinitionsNode(wsdlRoot)
 const typeNode = getTypesNode(definitionsNode)
 const schemaNode = getSchemaNode(typeNode)
+const definitionsNamespaces = getNamespacesFromNode(definitionsNode)
 const schemaNamespaces = getNamespacesFromNode(schemaNode)
-console.log('schemaNamespaces', schemaNamespaces)
-const complexTypes = complexTypesFromSchema(WSDL_PATH, schemaNode)
+const namespaces = new Map([...definitionsNamespaces, ...schemaNamespaces])
+console.log('namespaces', namespaces)
+const complexTypes = complexTypesFromSchema(WSDL_PATH, schemaNode, namespaces)
 console.log('complexTypes', complexTypes)
 if (schemaNode !== undefined) {
-    const schemaObject = schemaToObject(schemaNode, schemaNamespaces, complexTypes)
+    const schemaObject = schemaToObject(schemaNode, namespaces, complexTypes)
     console.log(schemaObject)
 }
