@@ -1,12 +1,44 @@
-export const sequenceToObject = (node) => {
+import fs from "fs";
+import path from "path";
+import { XMLParser } from "fast-xml-parser";
+
+export const loadXml = (xmlPath) => {
+    const xmlContentString = fs.readFileSync(xmlPath);
+    const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: "",
+        removeNSPrefix: false,
+    });
+    const xmlContentObject = parser.parse(xmlContentString);
+    return xmlContentObject;
+}
+
+export const loadXsd = (wsdlFile, xsdPath) => {
+    const wsdlDir = path.dirname(wsdlFile);
+    return loadXml(path.resolve(wsdlDir, xsdPath));
+}
+
+export const sequenceToObject = (node, namespaces, complexTypes) => {
     const object = {};
     const elementNode = getElementNode(node)
     if (Array.isArray(elementNode)) {
         for (const node of elementNode) {
-            object[node.name] = node.type
+            const [prefix, name] = node.type.split(':')
+            const type = namespaces.get(prefix) !== undefined ? namespaces.get(prefix) + ':' + name : namespaces.get('targetNamespace') + ':' + name
+            if (complexTypes !== undefined) {
+                object[node.name] = complexTypes[type] ?? type
+            } else {
+                object[node.name] = type
+            }
         }
     } else {
-        object[elementNode.name] = elementNode.type
+        const [prefix, name] = elementNode.type.split(':')
+        const type = namespaces.get(prefix) !== undefined ? namespaces.get(prefix) + ':' + name : namespaces.get('targetNamespace') + ':' + name
+        if (complexTypes !== undefined) {
+            object[elementNode.name] = complexTypes[type] ?? type
+        } else {
+            object[elementNode.name] = type
+        }
     }
     return object;
 }
@@ -22,6 +54,16 @@ export const getSchemaNode = (node) => {
 }
 
 export const getElementNode = (node) => {
+    if (Array.isArray(node)) {
+        const elementNodes = [];
+        for (const item of node) {
+            const elementNode = getElementNode(item)
+            if (elementNode !== undefined) {
+                elementNodes.push(elementNode)
+            }
+        }
+        return elementNodes;
+    }
     const elementField = Object.keys(node).find(objectField => objectField.match(/([a-zA-z0-9]*:)?element/));
     return node[elementField]
 }
@@ -31,26 +73,80 @@ export const getComplexTypeNode = (node) => {
     return node[complexTypeField]
 }
 
-export const complexTypeToObject = (node) => {
-    const sequenceNode = getSequenceNode(node)
-    if (sequenceNode !== undefined) {
-        return sequenceToObject(sequenceNode)
+export const complexTypeToObject = (node, namespaces, complexTypes) => {
+    if (Array.isArray(node)) {
+        const sequenceObject = {};
+        for (const item of node) {
+            const sequenceNode = getSequenceNode(item)
+            if (sequenceNode !== undefined) {
+                sequenceObject[item.name] = sequenceToObject(sequenceNode, namespaces, complexTypes)
+            }
+        }
+        return sequenceObject;
+    } else {
+        const sequenceNode = getSequenceNode(node)
+        if (sequenceNode !== undefined) {
+            return sequenceToObject(sequenceNode, namespaces, complexTypes);
+        }
+        console.log('node', node)
+        throw new Error('No sequence node found')
     }
-    throw new Error('No sequence node found')
+
 }
 
-export const schemaToObject = (node) => {
+export const complexTypesFromSchema = (wsdlFile, node, namespaces) => {
+    const targetNamespace = node.targetNamespace
+    const schemaNamespaces = namespaces ?? getNamespacesFromNode(node)
+    const currentNamespaces = schemaNamespaces
+    let object = {};
+    const importNode = getImportNode(node)
+    if (importNode !== undefined) {
+        if (Array.isArray(importNode)) {
+            for (const item of importNode) {
+                const importNode = loadXsd(wsdlFile, item.schemaLocation)
+                const schemaNode = getSchemaNode(importNode)
+                object = { ...object, ...complexTypesFromSchema(wsdlFile, schemaNode, currentNamespaces) }
+            }
+        } else {
+            const importNode = loadXsd(wsdlFile, importNode.schemaLocation)
+            const schemaNode = getSchemaNode(importNode)
+            object = complexTypesFromSchema(wsdlFile, schemaNode, currentNamespaces)
+        }
+    }
+    const complexTypeNode = getComplexTypeNode(node)
+    if (complexTypeNode !== undefined) {
+        if (Array.isArray(complexTypeNode)) {
+            for (const item of complexTypeNode) {
+                object[targetNamespace + ':' + item.name] = complexTypeToObject(item, currentNamespaces)
+            }
+        } else {
+            object[targetNamespace + ':' + complexTypeNode.name] = complexTypeToObject(complexTypeNode, currentNamespaces)
+        }
+    }
+    const elementNode = getElementNode(node)
+    if (elementNode !== undefined && getSequenceNode(elementNode) !== undefined) {
+        if (Array.isArray(elementNode)) {
+            for (const item of elementNode) {
+                object[targetNamespace + ':' + item.name] = complexTypeToObject(item, currentNamespaces)
+            }
+        } else {
+            object[targetNamespace + ':' + elementNode.name] = complexTypeToObject(elementNode, currentNamespaces)
+        }
+    }
+    return object;
+}
+
+export const schemaToObject = (node, namespaces, complexTypes) => {
     const object = {};
     const elementNode = getElementNode(node)
     if (Array.isArray(elementNode)) {
         for (const item of elementNode) {
             const complexTypeNode = getComplexTypeNode(item)
-            object[item.name] = complexTypeToObject(complexTypeNode)
+            object[item.type ?? item.name] = complexTypeToObject(complexTypeNode, namespaces, complexTypes)
         }
     } else {
         const complexTypeNode = getComplexTypeNode(node)
-        object[elementNode.name] = complexTypeToObject(complexTypeNode)
-        object.type = elementNode.type
+        object[elementNode.type ?? elementNode.name] = complexTypeToObject(complexTypeNode, namespaces, complexTypes)
     }
     object.targetNamespace = node.targetNamespace
     return object;
@@ -71,51 +167,55 @@ export const getImportNode = (node) => {
     return node[importField]
 }
 
+export const getNamespacesFromNode = (node) => {
+    const namespaces = new Map();
+    if(node.targetNamespace !== undefined) {
+        namespaces.set('targetNamespace', node.targetNamespace)
+    }
+    for (const key of Object.keys(node)) {
+        const match = key.match(/xmlns:([a-zA-z0-9]*)/)
+        if (match !== null) {
+            const value = node[key]
+            namespaces.set(match[1], value)
+        }
+    }
+    return namespaces;
+}
+
 export const getAllNamespaces = (wsdlRoot) => {
     console.log('wsdlRoot', wsdlRoot)
-    const namespaces = new Set();
-    const definitionsNode = getDefinitionsNode(wsdlRoot)
+    const namespaces = new Map();
+    const definitionsNode = getDefinitionsNode(wsdlRoot) ?? {};
+    namespaces.set('targetNamespace', definitionsNode.targetNamespace)
     for (const key of Object.keys(definitionsNode)) {
         const match = key.match(/xmlns:([a-zA-z0-9]*)/)
         if (match !== null) {
             const value = definitionsNode[key]
-            namespaces.add({
-                prefix: match[1],
-                URI: value
-            })
+            namespaces.set(match[1], value)
         }
     }
-    const typeNode = getTypesNode(definitionsNode)
+    const typeNode = getTypesNode(definitionsNode) ?? {};
     for (const key of Object.keys(typeNode)) {
         const match = key.match(/xmlns:([a-zA-z0-9]*)/)
         if (match !== null) {
             const value = typeNode[key]
-            namespaces.add({
-                prefix: match[1],
-                URI: value
-            })
+            namespaces.set(match[1], value)
         }
     }
-    const schemaNode = getSchemaNode(typeNode)
+    const schemaNode = getSchemaNode(typeNode) ?? {};
     for (const key of Object.keys(schemaNode)) {
         const match = key.match(/xmlns:([a-zA-z0-9]*)/)
         if (match !== null) {
             const value = schemaNode[key]
-            namespaces.add({
-                prefix: match[1],
-                URI: value
-            })
+            namespaces.set(match[1], value)
         }
     }
-    const importNode = getImportNode(schemaNode)
+    const importNode = getImportNode(schemaNode) ?? {};
     for (const key of Object.keys(importNode)) {
         const match = key.match(/xmlns:([a-zA-z0-9]*)/)
         if (match !== null) {
             const value = importNode[key]
-            namespaces.add({
-                prefix: match[1],
-                URI: value
-            })
+            namespaces.set(match[1], value)
         }
     }
     return namespaces;
