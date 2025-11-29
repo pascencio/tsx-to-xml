@@ -6,6 +6,9 @@
     "jsxImportSource": "xml-runtime",
     "moduleResolution": "node",
     "baseUrl": "src",
+    "paths": {
+      "@xml-runtime/*": ["xml-runtime/*"]
+    },
     "strict": true,
     "outDir": "dist",
     "esModuleInterop": true,

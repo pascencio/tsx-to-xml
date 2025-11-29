@@ -1,12 +1,10 @@
-export type Namespace = {
-    [tag: string]: () => string;
-  };
-  
-  export function ns(prefix: string): Namespace {
-    return new Proxy<Namespace>({} as Namespace, {
-      get(_, tag: string) {
-        return () => `${prefix}:${tag}`;
-      }
-    });
-  }
-  
+export function ns<TPrefix extends string, TTags extends string>(
+  prefix: TPrefix,
+  tags: readonly TTags[]
+) {
+  return new Proxy({} as Record<TTags, () => `${TPrefix}:${TTags}`>, {
+    get(_, tag: TTags) {
+      return () => `${prefix}:${tag}`;
+    }
+  });
+}

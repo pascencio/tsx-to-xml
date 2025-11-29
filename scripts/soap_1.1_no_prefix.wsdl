@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/no-prefix-service">
+
+    <types>
+        <xsd:schema targetNamespace="http://example.com/no-prefix-types" elementFormDefault="qualified">
+
+            <xsd:element name="HelloRequest">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="Name" type="xsd:string"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+
+            <xsd:element name="HelloResponse">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="Message" type="xsd:string"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+
+        </xsd:schema>
+    </types>
+
+</definitions>
