@@ -2,8 +2,15 @@ import fs from "fs";
 import path from "path";
 import { XMLParser } from "fast-xml-parser";
 
-export const loadXml = (xmlPath) => {
-    const xmlContentString = fs.readFileSync(xmlPath);
+export const loadXml = async (xmlPath) => {
+    let xmlContentString = undefined
+    if (xmlPath.match(/^http(s)?:\/\//)) {
+        const response = await fetch(xmlPath);
+        xmlContentString = await response.text();
+    } else {
+        xmlContentString = fs.readFileSync(xmlPath);
+    }
+
     const parser = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: "",
@@ -13,15 +20,19 @@ export const loadXml = (xmlPath) => {
     return xmlContentObject;
 }
 
-export const loadXsd = (wsdlFile, xsdPath) => {
+export const loadXsd = async (wsdlFile, xsdPath) => {
+    if (wsdlFile.match(/^http(s)?:\/\//)) {
+        const wsdlURLWithoutName = wsdlFile.split('/').slice(0, -1).join('/')
+        return await loadXml([wsdlURLWithoutName, xsdPath].join('/'));
+    }
     const wsdlDir = path.dirname(wsdlFile);
-    return loadXml(path.resolve(wsdlDir, xsdPath));
+    return await loadXml(path.resolve(wsdlDir, xsdPath));
 }
 
 const fillObject = (object, namespaces, complexTypes) => {
     for (const item of Object.keys(object)) {
         const value = object[item]
-        if(complexTypes !== undefined && complexTypes[value] !== undefined) {
+        if (complexTypes !== undefined && complexTypes[value] !== undefined) {
             object[item] = fillObject(complexTypes[value], namespaces, complexTypes)
         }
     }
@@ -42,11 +53,11 @@ export const sequenceToObject = (node, namespaces, complexTypes, targetNamespace
             const type = namespace + ':' + name
             if (complexTypes !== undefined) {
                 const complexTypeObject = complexTypes[type]
-                if(complexTypeObject !== undefined && typeof complexTypeObject === 'object') {
+                if (complexTypeObject !== undefined && typeof complexTypeObject === 'object') {
                     object[node.name] = fillObject(complexTypeObject, namespaces, complexTypes)
                 } else {
                     object[node.name] = type
-                }   
+                }
             } else {
                 object[node.name] = type
             }
@@ -63,7 +74,7 @@ export const sequenceToObject = (node, namespaces, complexTypes, targetNamespace
         const type = namespace + ':' + name
         if (complexTypes !== undefined) {
             const complexTypeObject = complexTypes[type]
-            if(complexTypeObject !== undefined && typeof complexTypeObject === 'object') {
+            if (complexTypeObject !== undefined && typeof complexTypeObject === 'object') {
                 object[elementNode.name] = fillObject(complexTypeObject, namespaces, complexTypes)
             } else {
                 object[elementNode.name] = type
@@ -131,7 +142,7 @@ export const complexTypeToObject = (node, namespaces, complexTypes, targetNamesp
 
 }
 
-export const complexTypesFromSchema = (wsdlFile, node, namespaces) => {
+export const complexTypesFromSchema = async (wsdlFile, node, namespaces) => {
     const targetNamespace = node.targetNamespace
     const schemaNamespaces = namespaces ?? getNamespacesFromNode(node)
     const currentNamespaces = schemaNamespaces
@@ -140,12 +151,12 @@ export const complexTypesFromSchema = (wsdlFile, node, namespaces) => {
     if (importNode !== undefined) {
         if (Array.isArray(importNode)) {
             for (const item of importNode) {
-                const importNode = loadXsd(wsdlFile, item.schemaLocation)
+                const importNode = await loadXsd(wsdlFile, item.schemaLocation)
                 const schemaNode = getSchemaNode(importNode)
                 object = { ...object, ...complexTypesFromSchema(wsdlFile, schemaNode, currentNamespaces) }
             }
         } else {
-            const importNode = loadXsd(wsdlFile, importNode.schemaLocation)
+            const importNode = await loadXsd(wsdlFile, importNode.schemaLocation)
             const schemaNode = getSchemaNode(importNode)
             object = complexTypesFromSchema(wsdlFile, schemaNode, currentNamespaces)
         }
@@ -173,7 +184,7 @@ export const complexTypesFromSchema = (wsdlFile, node, namespaces) => {
     return object;
 }
 
-export const schemaToObject = (node, namespaces, complexTypes) => {
+export const schemaToObject =  (node, namespaces, complexTypes) => {
     const object = {};
     const elementNode = getElementNode(node)
     if (Array.isArray(elementNode)) {
@@ -242,7 +253,7 @@ export const getRequestTypeFromDefinitions = (definitionsNode, schemaObject) => 
 
 export const getNamespacesFromNode = (node) => {
     const namespaces = new Map();
-    if(node.targetNamespace !== undefined) {
+    if (node.targetNamespace !== undefined) {
         namespaces.set('targetNamespace', node.targetNamespace)
     }
     for (const key of Object.keys(node)) {

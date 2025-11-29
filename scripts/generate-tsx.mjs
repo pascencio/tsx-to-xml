@@ -12,14 +12,14 @@ import {
 const WSDL_PATH = process.argv[2];
 const OUT_DIR = process.argv[3];
 
-const wsdlRoot = loadXml(WSDL_PATH);
+const wsdlRoot = await loadXml(WSDL_PATH);
 const definitionsNode = getDefinitionsNode(wsdlRoot)
 const typeNode = getTypesNode(definitionsNode)
 const schemaNode = getSchemaNode(typeNode)
 const definitionsNamespaces = getNamespacesFromNode(definitionsNode)
 const schemaNamespaces = getNamespacesFromNode(schemaNode)
 const namespaces = new Map([...definitionsNamespaces, ...schemaNamespaces])
-const complexTypes = complexTypesFromSchema(WSDL_PATH, schemaNode, namespaces)
+const complexTypes = await complexTypesFromSchema(WSDL_PATH, schemaNode, namespaces)
 if (schemaNode !== undefined) {
     const schemaObject = schemaToObject(schemaNode, namespaces, complexTypes)
     const requestType = getRequestTypeFromDefinitions(definitionsNode, schemaObject)
