@@ -2,9 +2,9 @@
 // AUTO-GENERATED — DO NOT EDIT
 // targetNamespace: http://tempuri.org/
 
-import { ns } from "../xml-runtime/ns";
+import { ns } from "@xml-runtime/ns";
 
-export const ORG_TAGS = [
+export const ns0Tags = [
   "Add",
   "AddResponse",
   "AddResult",
@@ -21,7 +21,7 @@ export const ORG_TAGS = [
   "intB"
 ] as const;
 
-export type orgTag = typeof ORG_TAGS[number];
+export type ns0Tag = typeof ns0Tags[number];
 
-export const org_prefix = "org";
-export const org = ns("org", ORG_TAGS);
+export const ns0_prefix = "ns0";
+export const ns0 = ns(ns0_prefix, ns0Tags);

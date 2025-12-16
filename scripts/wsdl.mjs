@@ -32,8 +32,8 @@ export const loadXsd = async (wsdlFile, xsdPath) => {
 const fillObject = (object, namespaces, complexTypes) => {
     for (const item of Object.keys(object)) {
         const value = object[item]
-        if (complexTypes !== undefined && complexTypes[value] !== undefined) {
-            object[item] = fillObject(complexTypes[value], namespaces, complexTypes)
+        if (complexTypes !== undefined && complexTypes[value.type] !== undefined) {
+            object[item] = fillObject(complexTypes[value.type], namespaces, complexTypes)
         }
     }
     return object;
@@ -114,7 +114,11 @@ const processElementsToObject = (elementNode, namespaces, complexTypes, targetNa
                 continue;
             }
             const processedType = processSingleElement(node, namespaces, complexTypes, targetNamespace);
-            object[node.name] = processedType;
+            object[node.name] = {
+                maxOccurs: node.maxOccurs ?? '1',
+                minOccurs: node.minOccurs ?? '1',
+                type: processedType,
+            };
         }
         return object;
     } else {
@@ -131,7 +135,11 @@ const processElementsToObject = (elementNode, namespaces, complexTypes, targetNa
         }
         
         const processedType = processSingleElement(elementNode, namespaces, complexTypes, targetNamespace);
-        object[elementNode.name] = processedType;
+        object[elementNode.name] = {
+            maxOccurs: elementNode.maxOccurs ?? '1',
+            minOccurs: elementNode.minOccurs ?? '1',
+            type: processedType,
+        };
         return object;
     }
 }
@@ -521,14 +529,16 @@ export const complexTypesFromSchema = async (wsdlFile, node, namespaces) => {
     if (importNode !== undefined) {
         if (Array.isArray(importNode)) {
             for (const item of importNode) {
-                const importNode = await loadXsd(wsdlFile, item.schemaLocation)
-                const schemaNode = getSchemaNode(importNode)
-                object = { ...object, ...complexTypesFromSchema(wsdlFile, schemaNode, currentNamespaces) }
+                const importedXsd = await loadXsd(wsdlFile, item.schemaLocation)
+                const schemaNode = getSchemaNode(importedXsd)
+                const importedComplexTypes = await complexTypesFromSchema(wsdlFile, schemaNode, currentNamespaces)
+                object = { ...object, ...importedComplexTypes }
             }
         } else {
-            const importNode = await loadXsd(wsdlFile, importNode.schemaLocation)
-            const schemaNode = getSchemaNode(importNode)
-            object = complexTypesFromSchema(wsdlFile, schemaNode, currentNamespaces)
+            const importedXsd = await loadXsd(wsdlFile, importNode.schemaLocation)
+            const schemaNode = getSchemaNode(importedXsd)
+            const importedComplexTypes = await complexTypesFromSchema(wsdlFile, schemaNode, currentNamespaces)
+            object = { ...object, ...importedComplexTypes }
         }
     }
     const complexTypeNode = getComplexTypeNode(node)
@@ -541,14 +551,29 @@ export const complexTypesFromSchema = async (wsdlFile, node, namespaces) => {
             object[targetNamespace + ':' + complexTypeNode.name] = complexTypeToObject(complexTypeNode, currentNamespaces, object, targetNamespace)
         }
     }
+    // Buscar elementos con complexType inline (elementos que tienen complexType dentro de ellos)
     const elementNode = getElementNode(node)
-    if (elementNode !== undefined && getSequenceNode(elementNode) !== undefined) {
+    if (elementNode !== undefined) {
         if (Array.isArray(elementNode)) {
             for (const item of elementNode) {
-                object[targetNamespace + ':' + item.name] = complexTypeToObject(item, currentNamespaces, object, targetNamespace)
+                const itemComplexType = getComplexTypeNode(item)
+                if (itemComplexType !== undefined) {
+                    // Elemento con complexType inline
+                    object[targetNamespace + ':' + item.name] = complexTypeToObject(itemComplexType, currentNamespaces, object, targetNamespace)
+                } else if (getSequenceNode(item) !== undefined) {
+                    // Elemento con sequence directamente (sin complexType wrapper)
+                    object[targetNamespace + ':' + item.name] = complexTypeToObject(item, currentNamespaces, object, targetNamespace)
+                }
             }
         } else {
-            object[targetNamespace + ':' + elementNode.name] = complexTypeToObject(elementNode, currentNamespaces, object, targetNamespace)
+            const elementComplexType = getComplexTypeNode(elementNode)
+            if (elementComplexType !== undefined) {
+                // Elemento con complexType inline
+                object[targetNamespace + ':' + elementNode.name] = complexTypeToObject(elementComplexType, currentNamespaces, object, targetNamespace)
+            } else if (getSequenceNode(elementNode) !== undefined) {
+                // Elemento con sequence directamente (sin complexType wrapper)
+                object[targetNamespace + ':' + elementNode.name] = complexTypeToObject(elementNode, currentNamespaces, object, targetNamespace)
+            }
         }
     }
     return object;
