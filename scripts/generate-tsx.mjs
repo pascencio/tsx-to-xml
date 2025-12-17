@@ -9,14 +9,14 @@ import {
     getRequestTypeFromDefinitions,
 } from "./wsdl.mjs";
 import {
-    createInterfaceTemplate,
-    createPropsInterfaceTemplate,
-    createNamespacesTemplate,
-    createTypeTemplate,
-    extractNamespaceObject,
-    extractNamespacePrefixObject,
-    extractNamespaceTypeObject,
-    createXmlBodyTemplate,
+    generateInterfaceCode,
+    generatePropsInterfaceCode,
+    generateNamespacesCode,
+    generateTypeCode,
+    extractNamespaceTagsMapping,
+    extractNamespacePrefixesMapping,
+    extractNamespaceTypesMapping,
+    generateXmlBodyCode,
 } from "./template.mjs";
 import { toPascalCase } from "./util.mjs";
 import fs from "fs";
@@ -62,11 +62,11 @@ function shouldCreateInterface(key, requestTypeObject) {
 /**
  * Genera el contenido de imports y declaraciones de namespaces
  */
-function generateImportsAndNamespaces(namespacesObject) {
+function generateImportsAndNamespaces(namespacesMapping) {
     return `import { soap } from "@xml-runtime/soap";
 import { ns } from "@xml-runtime/ns";
 
-${createNamespacesTemplate(namespacesObject)}
+${generateNamespacesCode(namespacesMapping)}
 `;
 }
 
@@ -76,7 +76,7 @@ ${createNamespacesTemplate(namespacesObject)}
 function generateSimpleTypes(requestTypeObject) {
     return Object.keys(requestTypeObject)
         .filter(key => isSimpleXmlSchemaType(key, requestTypeObject))
-        .map(key => createTypeTemplate(key, requestTypeObject[key]))
+        .map(key => generateTypeCode(key, requestTypeObject[key]))
         .join(';\n') + '\n';
 }
 
@@ -84,11 +84,11 @@ function generateSimpleTypes(requestTypeObject) {
  * Genera el contenido de interfaces TypeScript
  */
 function generateInterfaces(requestType, requestTypeObject) {
-    const propsInterface = createPropsInterfaceTemplate(requestType, requestTypeObject);
+    const propsInterface = generatePropsInterfaceCode(requestType, requestTypeObject);
     
     const complexInterfaces = Object.keys(requestTypeObject)
         .filter(key => shouldCreateInterface(key, requestTypeObject))
-        .map(key => createInterfaceTemplate(key, requestTypeObject[key]))
+        .map(key => generateInterfaceCode(key, requestTypeObject[key]))
         .join('');
     
     return propsInterface + complexInterfaces;
@@ -97,9 +97,9 @@ function generateInterfaces(requestType, requestTypeObject) {
 /**
  * Genera los atributos xmlns para el elemento Envelope
  */
-function generateXmlnsAttributes(namespacesPrefixObject) {
-    return Object.keys(namespacesPrefixObject)
-        .map(key => `xmlns:${key}="${namespacesPrefixObject[key]}"`)
+function generateXmlnsAttributes(namespacesPrefixMapping) {
+    return Object.keys(namespacesPrefixMapping)
+        .map(key => `xmlns:${key}="${namespacesPrefixMapping[key]}"`)
         .join(' ');
 }
 
@@ -109,15 +109,15 @@ function generateXmlnsAttributes(namespacesPrefixObject) {
 function generateComponentContent(
     requestType,
     soapNamespaceURI,
-    namespacesPrefixObject,
+    namespacesPrefixMapping,
     baseNamespacePrefix,
-    namespacesTypeObject,
+    namespacesTypeMapping,
     requestTypeObject
 ) {
-    const xmlnsAttributes = generateXmlnsAttributes(namespacesPrefixObject);
-    const xmlBody = createXmlBodyTemplate(
+    const xmlnsAttributes = generateXmlnsAttributes(namespacesPrefixMapping);
+    const xmlBody = generateXmlBodyCode(
         baseNamespacePrefix,
-        namespacesTypeObject,
+        namespacesTypeMapping,
         requestType,
         requestTypeObject
     );
@@ -157,20 +157,20 @@ async function generateTsxFromWsdl(wsdlPath, outDir) {
     const requestType = getRequestTypeFromDefinitions(definitionsNode, schemaObject);
     const requestTypeObject = schemaObject[requestType];
     
-    const namespacesObject = extractNamespaceObject(requestType, requestTypeObject);
-    const namespacesPrefixObject = extractNamespacePrefixObject(requestType, requestTypeObject);
-    const namespacesTypeObject = extractNamespaceTypeObject(requestType, requestTypeObject);
-    const baseNamespacePrefix = namespacesTypeObject[requestType].prefix;
+    const namespacesTagsMapping = extractNamespaceTagsMapping(requestType, requestTypeObject);
+    const namespacesPrefixMapping = extractNamespacePrefixesMapping(requestType, requestTypeObject);
+    const namespacesTypeMapping = extractNamespaceTypesMapping(requestType, requestTypeObject);
+    const baseNamespacePrefix = namespacesTypeMapping[requestType].prefix;
     
-    const importContent = generateImportsAndNamespaces(namespacesObject);
+    const importContent = generateImportsAndNamespaces(namespacesTagsMapping);
     const propsContent = generateSimpleTypes(requestTypeObject) + 
                         generateInterfaces(requestType, requestTypeObject);
     const xmlContent = generateComponentContent(
         requestType,
         soapNamespaceURI,
-        namespacesPrefixObject,
+        namespacesPrefixMapping,
         baseNamespacePrefix,
-        namespacesTypeObject,
+        namespacesTypeMapping,
         requestTypeObject
     );
     
