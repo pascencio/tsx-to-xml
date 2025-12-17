@@ -158,8 +158,9 @@ function extractTagNames(baseObject) {
         if (typeof element?.type === 'object') {
             const nestedTags = extractTagNames(element.type);
             result.push(...nestedTags);
+        } else {
+            result.push(key);
         }
-        result.push(key);
     }
     
     return result;
