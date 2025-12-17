@@ -73,11 +73,31 @@ export function extractNamespaceObject(baseName,baseObject) {
     Object.keys(baseObject)
     .filter(key => key !== '$namespace')
     .forEach((key) => {
-        const namespace = typeof baseObject[key]?.type === 'object' ? baseObject[key].type['$namespace'] : key
+        let namespace =  key
+        let tagNames = [key]
+        if (typeof baseObject[key]?.type === 'object') {
+            namespace = baseObject[key].type['$namespace']
+            tagNames = [...tagNames, ...extractTagNames(baseObject[key].type)]
+        }
         const namespacePrefix= extractNamespacePrefix(namespace)
-        namespacesObject[namespacePrefix] = namespacesObject[namespacePrefix] === undefined ? [key] : [...namespacesObject[namespacePrefix], key]
+        if (namespacesObject[namespacePrefix] === undefined) {
+            namespacesObject[namespacePrefix] = tagNames
+        } else {
+            namespacesObject[namespacePrefix] = [...namespacesObject[namespacePrefix], ...tagNames]
+        }
     })
     return namespacesObject
+}
+
+export function extractTagNames(baseObject) {
+    return Object.keys(baseObject)
+    .filter(key => key !== '$namespace')
+    .reduce((acc, key) => {
+        if (typeof baseObject[key]?.type === 'object') {
+            return [...acc, ...extractTagNames(baseObject[key].type)]
+        }
+        return [...acc, key]
+    }, [])
 }
 
 export function extractNamespacePrefixObject(baseName,baseObject) {
@@ -98,23 +118,46 @@ export function extractNamespacePrefixObject(baseName,baseObject) {
 
 export function extractNamespaceTypeObject(baseName,baseObject) {
     const namespacesObject = {}
-    const namespacePrefix = extractNamespacePrefix(baseObject["$namespace"])
+    const namespace = baseObject["$namespace"]
+    const namespacePrefix = extractNamespacePrefix(namespace)
+    const flatBaseObjectKeys = flattenBaseObjectKeys(baseObject, namespace, namespacePrefix)
     namespacesObject[baseName] = {
-        uri: baseObject["$namespace"],
+        uri: namespace,
         prefix: namespacePrefix,
     }
-    Object.keys(baseObject)
-    .filter(key => key !== '$namespace' &&
-        typeof baseObject[key]?.type === 'object')
-    .forEach((key) => {
-        const namespace = baseObject[key].type['$namespace']
-        const namespacePrefix = extractNamespacePrefix(namespace)
-        namespacesObject[key] = {
-            uri: namespace,
-            prefix: namespacePrefix,
+    console.log('flatBaseObjectKeys: ', flatBaseObjectKeys)
+    flatBaseObjectKeys.forEach(item => {
+        namespacesObject[item.name] = {
+            uri: item.uri,
+            prefix: item.prefix,
         }
     })
     return namespacesObject
+}
+
+function flattenBaseObjectKeys(baseObject,currentNamespace,currentNamespacePrefix) {
+    return Object.keys(baseObject)
+    .filter(key => key !== '$namespace')
+    .reduce((acc, key) => {
+        if (typeof baseObject[key]?.type === 'object') {
+            console.log('baseObject[key].type: ', baseObject[key].type)
+            const namespace = baseObject[key].type['$namespace']
+            const namespacePrefix = extractNamespacePrefix(namespace)
+            return [...acc, ...flattenBaseObjectKeys(baseObject[key].type, namespace, namespacePrefix),
+                {
+                    name: key,
+                    uri: namespace,
+                    prefix: namespacePrefix,
+                }
+            ]
+        }
+        console.log('key: ', key)
+        return [...acc, {
+            name: key,
+            uri: currentNamespace,
+            prefix: currentNamespacePrefix,
+        }]
+    }, [])
 }
 
 export function extractNamespacePrefix(namespace) {
@@ -128,4 +171,34 @@ export function createNamespacesTemplate(namespacesObject) {
             return `const ${key} = ns("${key}", ["${namespacesObject[key].join('", "')}"] as const);`
         })
         .join('\n')}`
+}
+
+export function createXmlBodyTemplate(baseNamespacePrefix, namespacesTypeObject, baseName, baseObject) {
+    return `<${baseNamespacePrefix}.${baseName}>
+    ${Object.keys(baseObject)
+    .filter(key => key !== '$namespace')
+    .map(key => {
+        return createXmlBodyTemplateProperty(namespacesTypeObject, baseNamespacePrefix, key, baseObject[key])
+    }).join('\n')}
+</${baseNamespacePrefix}.${baseName}>`
+}
+
+export function createXmlBodyTemplateProperty(namespacesTypeObject, baseNamespacePrefix, key, elementObject, parentKey = null) {
+let namespacePrefix = null
+if (parentKey !== null) {
+    namespacePrefix = namespacesTypeObject[parentKey]?.prefix !== undefined ? namespacesTypeObject[parentKey].prefix : baseNamespacePrefix
+} else {
+    namespacePrefix = namespacesTypeObject[key]?.prefix !== undefined ? namespacesTypeObject[key].prefix : baseNamespacePrefix
+}
+if (typeof elementObject?.type === 'object') {
+    return `<${namespacePrefix}.${key}>
+    ${Object.keys(elementObject.type)
+        .filter(elementKey => elementKey !== '$namespace')
+        .map(elementKey => {
+        return createXmlBodyTemplateProperty(namespacesTypeObject, baseNamespacePrefix, elementKey, elementObject.type[elementKey], key)
+    }).join('\n')}
+    </${namespacePrefix}.${key}>`
+}
+const propertyName = parentKey !== null ? `${toCamelCase(parentKey)}.${toCamelCase(key)}` : toCamelCase(key)
+return `<${namespacePrefix}.${key}>{props.${propertyName}}</${namespacePrefix}.${key}>`
 }

@@ -8,8 +8,17 @@ import {
     schemaToObject,
     getRequestTypeFromDefinitions,
 } from "./wsdl.mjs";
-import { createInterfaceTemplate, createPropsInterfaceTemplate, createNamespacesTemplate, createTypeTemplate, extractNamespaceObject, extractNamespacePrefixObject, extractNamespaceTypeObject } from "./template.mjs";
-import { toPascalCase, toCamelCase } from "./util.mjs";
+import { 
+    createInterfaceTemplate, 
+    createPropsInterfaceTemplate, 
+    createNamespacesTemplate,
+    createTypeTemplate,
+    extractNamespaceObject,
+    extractNamespacePrefixObject,
+    extractNamespaceTypeObject,
+    createXmlBodyTemplate,
+} from "./template.mjs";
+import { toPascalCase } from "./util.mjs";
 import fs from "fs";
 
 const WSDL_PATH = process.argv[2];
@@ -68,15 +77,7 @@ ${createNamespacesTemplate(namespacesObject)}
     }).join(' ')}>
     <soap.Header />
     <soap.Body>
-        <${baseNamespacePrefix}.${requestType}>
-            ${Object.keys(requestTypeObject)
-            .filter(key => key !== '$namespace')
-            .map(key => {
-                const namespacePrefix = namespacesTypeObject[key]?.prefix !== undefined ? namespacesTypeObject[key].prefix : baseNamespacePrefix
-return `<${namespacePrefix}.${key}>{props.${toCamelCase(key)}}</${namespacePrefix}.${key}>`
-            })
-            .join('\n')}
-        </${baseNamespacePrefix}.${requestType}>
+    ${createXmlBodyTemplate(baseNamespacePrefix, namespacesTypeObject, requestType, requestTypeObject)}
     </soap.Body>
 </soap.Envelope>
 }

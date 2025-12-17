@@ -3,11 +3,12 @@
     "devDependencies": {
         "esbuild": "^0.21.0",
         "fast-xml-parser": "^5.3.2",
+        "tsx": "^4.21.0",
         "typescript": "^5.4.0"
     },
     "scripts": {
-        "build": "node build.js",
-        "start": "node dist/index.js",
-        "wsdl:generate": "node scripts/generate-tags.mjs"
+        "build": "node build.mjs",
+        "start": "tsx src/index.ts",
+        "generate": "node scripts/generate-tsx.mjs scripts/soap_1.1_prefix.wsdl src"
     }
 }
