@@ -1,17 +1,19 @@
 # TSX to XML
 
-## Usage
+## Uso
+
+### Generar los archivos TSX
 
 ```bash
 npm run generate
 ```
 
-The output will be in the `src/GetCustomerRequest.tsx` file.
+El output será en el archivo `src/GetCustomerRequest.tsx`.
 
-## Run the generated code
+### Ejecutar el código generado
 
 ```bash
-npm run start
+npm run output
 ```
 
-The output will be in the console.
+El output será en la consola.
