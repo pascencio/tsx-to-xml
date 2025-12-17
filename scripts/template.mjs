@@ -22,12 +22,41 @@ const NAMESPACE_KEY = '$namespace';
 const XML_SCHEMA_URI = 'http://www.w3.org/2001/XMLSchema';
 const DEFAULT_OCCURS = '1';
 
+// Cache para memoización de extractNamespacePrefix
+const namespacePrefixCache = new Map();
+
+// Cache para operaciones de split en strings
+const stringSplitCache = new Map();
+
+/**
+ * Obtiene las claves de un objeto filtradas (sin NAMESPACE_KEY)
+ * Cachea el resultado para evitar múltiples Object.keys() y filtros
+ */
+function getFilteredKeys(obj) {
+    if (!obj || typeof obj !== 'object') return [];
+    const keys = Object.keys(obj);
+    return keys.filter(key => key !== NAMESPACE_KEY);
+}
+
+/**
+ * Cachea el resultado de split para strings que se usan frecuentemente
+ */
+function cachedSplit(str, separator) {
+    const cacheKey = `${str}${separator}`;
+    if (stringSplitCache.has(cacheKey)) {
+        return stringSplitCache.get(cacheKey);
+    }
+    const result = str.split(separator);
+    stringSplitCache.set(cacheKey, result);
+    return result;
+}
+
 /**
  * Crea la interfaz de props para el componente principal
  */
 export function createPropsInterfaceTemplate(baseName, baseObject) {
-    const props = Object.keys(baseObject)
-        .filter(key => key !== NAMESPACE_KEY)
+    const keys = getFilteredKeys(baseObject);
+    const props = keys
         .map(key => `\t${toCamelCase(key)}: ${key}`)
         .join(',\n');
     
@@ -41,7 +70,8 @@ ${props}
  * Extrae el tipo de esquema XML de una cadena con formato "prefix:type"
  */
 export function extractXmlSchemaType(type) {
-    return type.split(':')[1];
+    const parts = cachedSplit(type, ':');
+    return parts[1];
 }
 
 /**
@@ -76,7 +106,8 @@ export function createInterfaceTemplateProperty(prop, props) {
  * Crea un tipo TypeScript simple
  */
 export function createTypeTemplate(name, props) {
-    const typeName = props.type.split(':').slice(-1)[0];
+    const parts = cachedSplit(props.type, ':');
+    const typeName = parts[parts.length - 1];
     const tsType = XML_SCHEMA_TYPES[typeName];
     
     return `
@@ -101,7 +132,8 @@ function isValidInterfaceProperty(prop, props) {
  * Crea una interfaz TypeScript completa
  */
 export function createInterfaceTemplate(name, props) {
-    const properties = Object.keys(props.type)
+    const keys = Object.keys(props.type);
+    const properties = keys
         .filter(prop => isValidInterfaceProperty(prop, props))
         .map(prop => createInterfaceTemplateProperty(prop, props))
         .join(',\n');
@@ -115,49 +147,54 @@ ${properties}
 
 /**
  * Extrae nombres de tags recursivamente de un objeto base
+ * Optimizado: usa push() en lugar de spread operator
  */
 export function extractTagNames(baseObject) {
-    return Object.keys(baseObject)
-        .filter(key => key !== NAMESPACE_KEY)
-        .reduce((acc, key) => {
-            if (typeof baseObject[key]?.type === 'object') {
-                return [...acc, ...extractTagNames(baseObject[key].type)];
-            }
-            return [...acc, key];
-        }, []);
+    const result = [];
+    const keys = getFilteredKeys(baseObject);
+    
+    for (const key of keys) {
+        const element = baseObject[key];
+        if (typeof element?.type === 'object') {
+            const nestedTags = extractTagNames(element.type);
+            result.push(...nestedTags);
+        }
+        result.push(key);
+    }
+    
+    return result;
 }
 
 /**
  * Extrae un objeto que mapea prefijos de namespace a arrays de nombres de tags
+ * Optimizado: combina extracción de tags con iteración principal y usa push()
  */
 export function extractNamespaceObject(baseName, baseObject) {
     const namespacesObject = {};
     const baseNamespacePrefix = extractNamespacePrefix(baseObject[NAMESPACE_KEY]);
     namespacesObject[baseNamespacePrefix] = [baseName];
     
-    Object.keys(baseObject)
-        .filter(key => key !== NAMESPACE_KEY)
-        .forEach((key) => {
-            const element = baseObject[key];
-            let namespace = key;
-            let tagNames = [key];
-            
-            if (typeof element?.type === 'object') {
-                namespace = element.type[NAMESPACE_KEY];
-                tagNames = [...tagNames, ...extractTagNames(element.type)];
-            }
-            
-            const namespacePrefix = extractNamespacePrefix(namespace);
-            
-            if (namespacesObject[namespacePrefix] === undefined) {
-                namespacesObject[namespacePrefix] = tagNames;
-            } else {
-                namespacesObject[namespacePrefix] = [
-                    ...namespacesObject[namespacePrefix],
-                    ...tagNames
-                ];
-            }
-        });
+    const keys = getFilteredKeys(baseObject);
+    
+    for (const key of keys) {
+        const element = baseObject[key];
+        let namespace = key;
+        const tagNames = [key];
+        
+        if (typeof element?.type === 'object') {
+            namespace = element.type[NAMESPACE_KEY];
+            const nestedTags = extractTagNames(element.type);
+            tagNames.push(...nestedTags);
+        }
+        
+        const namespacePrefix = extractNamespacePrefix(namespace);
+        
+        if (namespacesObject[namespacePrefix] === undefined) {
+            namespacesObject[namespacePrefix] = tagNames;
+        } else {
+            namespacesObject[namespacePrefix].push(...tagNames);
+        }
+    }
     
     return namespacesObject;
 }
@@ -170,53 +207,56 @@ export function extractNamespacePrefixObject(baseName, baseObject) {
     const baseNamespacePrefix = extractNamespacePrefix(baseObject[NAMESPACE_KEY]);
     namespacesObject[baseNamespacePrefix] = baseObject[NAMESPACE_KEY];
     
-    Object.keys(baseObject)
-        .filter(key => key !== NAMESPACE_KEY)
-        .forEach((key) => {
-            const element = baseObject[key];
-            const namespace = typeof element?.type === 'object' 
-                ? element.type[NAMESPACE_KEY] 
-                : key;
-            const namespacePrefix = extractNamespacePrefix(namespace);
-            
-            if (namespacesObject[namespacePrefix] === undefined) {
-                namespacesObject[namespacePrefix] = namespace;
-            }
-        });
+    const keys = getFilteredKeys(baseObject);
+    
+    for (const key of keys) {
+        const element = baseObject[key];
+        const namespace = typeof element?.type === 'object' 
+            ? element.type[NAMESPACE_KEY] 
+            : key;
+        const namespacePrefix = extractNamespacePrefix(namespace);
+        
+        if (namespacesObject[namespacePrefix] === undefined) {
+            namespacesObject[namespacePrefix] = namespace;
+        }
+    }
     
     return namespacesObject;
 }
 
 /**
  * Aplana recursivamente las claves de un objeto base con información de namespace
+ * Optimizado: usa push() en lugar de spread operator
  */
 function flattenBaseObjectKeys(baseObject, currentNamespace, currentNamespacePrefix) {
-    return Object.keys(baseObject)
-        .filter(key => key !== NAMESPACE_KEY)
-        .reduce((acc, key) => {
-            const element = baseObject[key];
+    const result = [];
+    const keys = getFilteredKeys(baseObject);
+    
+    for (const key of keys) {
+        const element = baseObject[key];
+        
+        if (typeof element?.type === 'object') {
+            const namespace = element.type[NAMESPACE_KEY];
+            const namespacePrefix = extractNamespacePrefix(namespace);
             
-            if (typeof element?.type === 'object') {
-                const namespace = element.type[NAMESPACE_KEY];
-                const namespacePrefix = extractNamespacePrefix(namespace);
-                
-                return [
-                    ...acc,
-                    ...flattenBaseObjectKeys(element.type, namespace, namespacePrefix),
-                    {
-                        name: key,
-                        uri: namespace,
-                        prefix: namespacePrefix,
-                    }
-                ];
-            }
+            const nested = flattenBaseObjectKeys(element.type, namespace, namespacePrefix);
+            result.push(...nested);
             
-            return [...acc, {
+            result.push({
+                name: key,
+                uri: namespace,
+                prefix: namespacePrefix,
+            });
+        } else {
+            result.push({
                 name: key,
                 uri: currentNamespace,
                 prefix: currentNamespacePrefix,
-            }];
-        }, []);
+            });
+        }
+    }
+    
+    return result;
 }
 
 /**
@@ -233,33 +273,47 @@ export function extractNamespaceTypeObject(baseName, baseObject) {
     };
     
     const flatKeys = flattenBaseObjectKeys(baseObject, namespace, namespacePrefix);
-    flatKeys.forEach(item => {
+    for (const item of flatKeys) {
         namespacesObject[item.name] = {
             uri: item.uri,
             prefix: item.prefix,
         };
-    });
+    }
     
     return namespacesObject;
 }
 
 /**
  * Extrae el prefijo de namespace de una URI
+ * Optimizado: usa memoización para evitar recalcular el mismo namespace
  */
 export function extractNamespacePrefix(namespace) {
-    const hasSlash = namespace.indexOf('/') !== -1;
-    const namespaceLastPart = hasSlash 
-        ? namespace.split('/').slice(-1)[0] 
-        : namespace;
+    if (namespacePrefixCache.has(namespace)) {
+        return namespacePrefixCache.get(namespace);
+    }
     
-    return namespaceLastPart.slice(0, 3).toLowerCase();
+    const hasSlash = namespace.indexOf('/') !== -1;
+    let namespaceLastPart;
+    
+    if (hasSlash) {
+        const parts = cachedSplit(namespace, '/');
+        namespaceLastPart = parts[parts.length - 1];
+    } else {
+        namespaceLastPart = namespace;
+    }
+    
+    const prefix = namespaceLastPart.slice(0, 3).toLowerCase();
+    namespacePrefixCache.set(namespace, prefix);
+    
+    return prefix;
 }
 
 /**
  * Crea el template de declaraciones de namespaces
  */
 export function createNamespacesTemplate(namespacesObject) {
-    return Object.keys(namespacesObject)
+    const keys = Object.keys(namespacesObject);
+    return keys
         .map(key => {
             const tagNames = namespacesObject[key]
                 .map(tag => `"${tag}"`)
@@ -273,8 +327,8 @@ export function createNamespacesTemplate(namespacesObject) {
  * Crea el template del cuerpo XML principal
  */
 export function createXmlBodyTemplate(baseNamespacePrefix, namespacesTypeObject, baseName, baseObject) {
-    const properties = Object.keys(baseObject)
-        .filter(key => key !== NAMESPACE_KEY)
+    const keys = getFilteredKeys(baseObject);
+    const properties = keys
         .map(key => createXmlBodyTemplateProperty(
             namespacesTypeObject,
             baseNamespacePrefix,
@@ -316,8 +370,8 @@ export function createXmlBodyTemplateProperty(
     );
     
     if (typeof elementObject?.type === 'object') {
-        const nestedProperties = Object.keys(elementObject.type)
-            .filter(elementKey => elementKey !== NAMESPACE_KEY)
+        const keys = getFilteredKeys(elementObject.type);
+        const nestedProperties = keys
             .map(elementKey => createXmlBodyTemplateProperty(
                 namespacesTypeObject,
                 baseNamespacePrefix,
