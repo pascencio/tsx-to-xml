@@ -515,8 +515,7 @@ export const complexTypeToObject = (node, namespaces, complexTypes, targetNamesp
             return result;
         }
         
-        console.log('node', node)
-        throw new Error('No sequence, choice, all, group, simpleContent, or complexContent node found')
+        throw new Error('No se encontró nodo sequence, choice, all, group, simpleContent o complexContent')
     }
 }
 
@@ -662,7 +661,6 @@ export const getNamespacesFromNode = (node) => {
 }
 
 export const getAllNamespaces = (wsdlRoot) => {
-    console.log('wsdlRoot', wsdlRoot)
     const namespaces = new Map();
     const definitionsNode = getDefinitionsNode(wsdlRoot) ?? {};
     namespaces.set('targetNamespace', definitionsNode.targetNamespace)
