@@ -9,6 +9,6 @@
     "scripts": {
         "build": "node build.mjs",
         "output": "tsx src/index.ts",
-        "generate": "node scripts/generate-tsx.mjs scripts/soap_1.1_prefix.wsdl src"
+        "generate": "tsx src/cli/generate-tsx.ts resources/soap_1.1_prefix.wsdl src"
     }
 }

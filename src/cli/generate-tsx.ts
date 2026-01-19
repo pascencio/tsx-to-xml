@@ -7,7 +7,7 @@ import {
     complexTypesFromSchema,
     schemaToObject,
     getRequestTypeFromDefinitions,
-} from "./wsdl.mjs";
+} from "./wsdl.js";
 import {
     generateInterfaceCode,
     generatePropsInterfaceCode,
@@ -17,8 +17,8 @@ import {
     extractNamespacePrefixesMapping,
     extractNamespaceTypesMapping,
     generateXmlBodyCode,
-} from "./template.mjs";
-import { toPascalCase } from "./util.mjs";
+} from "./template.js";
+import { toPascalCase } from "./util.js";
 import fs from "fs";
 
 const XML_SCHEMA_URI = 'http://www.w3.org/2001/XMLSchema';
@@ -26,10 +26,19 @@ const NAMESPACE_KEY = '$namespace';
 const SOAP12_ENVELOPE_URI = 'http://www.w3.org/2003/05/soap-envelope';
 const SOAP11_ENVELOPE_URI = 'http://schemas.xmlsoap.org/soap/envelope/';
 
+interface RequestTypeObject {
+    [key: string]: {
+        type: string | any;
+        maxOccurs?: string;
+        minOccurs?: string;
+    };
+    $namespace?: string;
+}
+
 /**
  * Determina la URI del namespace SOAP basado en las definiciones del WSDL
  */
-function getSoapNamespaceURI(definitionsNamespaces) {
+function getSoapNamespaceURI(definitionsNamespaces: Map<string, string>): string {
     const soapEntry = Array.from(definitionsNamespaces.entries())
         .find(entry => entry[1].includes('soap'));
     
@@ -37,7 +46,7 @@ function getSoapNamespaceURI(definitionsNamespaces) {
         return SOAP11_ENVELOPE_URI;
     }
     
-    const lastPart = soapEntry[1].split('/').slice(-1)[0];
+    const lastPart = soapEntry[1].split('/').slice(-1)[0]!;
     return lastPart === 'soap12' 
         ? SOAP12_ENVELOPE_URI 
         : SOAP11_ENVELOPE_URI;
@@ -46,15 +55,15 @@ function getSoapNamespaceURI(definitionsNamespaces) {
 /**
  * Filtra propiedades que son tipos simples de XML Schema
  */
-function isSimpleXmlSchemaType(key, requestTypeObject) {
+function isSimpleXmlSchemaType(key: string, requestTypeObject: RequestTypeObject): boolean {
     return typeof requestTypeObject[key]?.type === 'string' &&
-        requestTypeObject[key]?.type?.includes(XML_SCHEMA_URI);
+        requestTypeObject[key]!.type.includes(XML_SCHEMA_URI);
 }
 
 /**
  * Filtra propiedades que deben generar interfaces complejas
  */
-function shouldCreateInterface(key, requestTypeObject) {
+function shouldCreateInterface(key: string, requestTypeObject: RequestTypeObject): boolean {
     return key !== NAMESPACE_KEY &&
         !isSimpleXmlSchemaType(key, requestTypeObject);
 }
@@ -62,7 +71,7 @@ function shouldCreateInterface(key, requestTypeObject) {
 /**
  * Genera el contenido de imports y declaraciones de namespaces
  */
-function generateImportsAndNamespaces(namespacesMapping) {
+function generateImportsAndNamespaces(namespacesMapping: Record<string, string[]>): string {
     return `import { soap } from "@xml-runtime/soap";
 import { ns } from "@xml-runtime/ns";
 
@@ -73,22 +82,25 @@ ${generateNamespacesCode(namespacesMapping)}
 /**
  * Genera los tipos TypeScript simples
  */
-function generateSimpleTypes(requestTypeObject) {
+function generateSimpleTypes(requestTypeObject: RequestTypeObject): string {
     return Object.keys(requestTypeObject)
         .filter(key => isSimpleXmlSchemaType(key, requestTypeObject))
-        .map(key => generateTypeCode(key, requestTypeObject[key]))
+        .map(key => generateTypeCode(key, requestTypeObject[key]!))
         .join(';\n') + '\n';
 }
 
 /**
  * Genera el contenido de interfaces TypeScript
  */
-function generateInterfaces(requestType, requestTypeObject) {
+function generateInterfaces(requestType: string, requestTypeObject: RequestTypeObject): string {
     const propsInterface = generatePropsInterfaceCode(requestType, requestTypeObject);
     
     const complexInterfaces = Object.keys(requestTypeObject)
         .filter(key => shouldCreateInterface(key, requestTypeObject))
-        .map(key => generateInterfaceCode(key, requestTypeObject[key]))
+        .map(key => {
+            // requestTypeObject[key] ya tiene la estructura correcta { type: TypeObject, ... }
+            return generateInterfaceCode(key, requestTypeObject[key] as any);
+        })
         .join('');
     
     return propsInterface + complexInterfaces;
@@ -97,7 +109,7 @@ function generateInterfaces(requestType, requestTypeObject) {
 /**
  * Genera los atributos xmlns para el elemento Envelope
  */
-function generateXmlnsAttributes(namespacesPrefixMapping) {
+function generateXmlnsAttributes(namespacesPrefixMapping: Record<string, string>): string {
     return Object.keys(namespacesPrefixMapping)
         .map(key => `xmlns:${key}="${namespacesPrefixMapping[key]}"`)
         .join(' ');
@@ -107,13 +119,13 @@ function generateXmlnsAttributes(namespacesPrefixMapping) {
  * Genera el contenido del componente TSX
  */
 function generateComponentContent(
-    requestType,
-    soapNamespaceURI,
-    namespacesPrefixMapping,
-    baseNamespacePrefix,
-    namespacesTypeMapping,
-    requestTypeObject
-) {
+    requestType: string,
+    soapNamespaceURI: string,
+    namespacesPrefixMapping: Record<string, string>,
+    baseNamespacePrefix: string,
+    namespacesTypeMapping: Record<string, { uri: string; prefix: string }>,
+    requestTypeObject: RequestTypeObject
+): string {
     const xmlnsAttributes = generateXmlnsAttributes(namespacesPrefixMapping);
     const xmlBody = generateXmlBodyCode(
         baseNamespacePrefix,
@@ -137,10 +149,16 @@ function generateComponentContent(
 /**
  * Función principal que genera el archivo TSX desde un WSDL
  */
-async function generateTsxFromWsdl(wsdlPath, outDir) {
+async function generateTsxFromWsdl(wsdlPath: string, outDir: string): Promise<void> {
     const wsdlRoot = await loadXml(wsdlPath);
     const definitionsNode = getDefinitionsNode(wsdlRoot);
+    if (!definitionsNode) {
+        throw new Error('No se encontró el nodo definitions en el WSDL');
+    }
     const typeNode = getTypesNode(definitionsNode);
+    if (!typeNode) {
+        throw new Error('No se encontró el nodo types en el WSDL');
+    }
     const schemaNode = getSchemaNode(typeNode);
     
     if (schemaNode === undefined) {
@@ -155,12 +173,12 @@ async function generateTsxFromWsdl(wsdlPath, outDir) {
     const complexTypes = await complexTypesFromSchema(wsdlPath, schemaNode, namespaces);
     const schemaObject = schemaToObject(schemaNode, namespaces, complexTypes);
     const requestType = getRequestTypeFromDefinitions(definitionsNode, schemaObject);
-    const requestTypeObject = schemaObject[requestType];
+    const requestTypeObject = schemaObject[requestType] as RequestTypeObject;
     
     const namespacesTagsMapping = extractNamespaceTagsMapping(requestType, requestTypeObject);
     const namespacesPrefixMapping = extractNamespacePrefixesMapping(requestType, requestTypeObject);
     const namespacesTypeMapping = extractNamespaceTypesMapping(requestType, requestTypeObject);
-    const baseNamespacePrefix = namespacesTypeMapping[requestType].prefix;
+    const baseNamespacePrefix = namespacesTypeMapping[requestType]!.prefix;
     
     const importContent = generateImportsAndNamespaces(namespacesTagsMapping);
     const propsContent = generateSimpleTypes(requestTypeObject) + 
@@ -184,7 +202,7 @@ const WSDL_PATH = process.argv[2];
 const OUT_DIR = process.argv[3];
 
 if (!WSDL_PATH || !OUT_DIR) {
-    console.error('Uso: node generate-tsx.mjs <ruta-wsdl> <directorio-salida>');
+    console.error('Uso: tsx cli/generate-tsx.ts <ruta-wsdl> <directorio-salida>');
     process.exit(1);
 }
 

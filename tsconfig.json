@@ -15,6 +15,7 @@
     "allowSyntheticDefaultImports": true
   },
   "include": [
-    "src"
+    "src",
+    "src/cli"
   ]
 }
