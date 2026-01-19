@@ -9,20 +9,20 @@ import {
     getRequestTypeFromDefinitions,
 } from "./wsdl.js";
 import {
-    generateInterfaceCode,
-    generatePropsInterfaceCode,
-    generateNamespacesCode,
-    generateTypeCode,
     extractNamespaceTagsMapping,
     extractNamespacePrefixesMapping,
     extractNamespaceTypesMapping,
-    generateXmlBodyCode,
+    prepareTemplateData,
 } from "./template.js";
-import { toPascalCase } from "./util.js";
+import { registerHandlebarsHelpers } from "./template-helpers.js";
+import Handlebars from "handlebars";
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const XML_SCHEMA_URI = 'http://www.w3.org/2001/XMLSchema';
-const NAMESPACE_KEY = '$namespace';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const SOAP12_ENVELOPE_URI = 'http://www.w3.org/2003/05/soap-envelope';
 const SOAP11_ENVELOPE_URI = 'http://schemas.xmlsoap.org/soap/envelope/';
 
@@ -53,97 +53,19 @@ function getSoapNamespaceURI(definitionsNamespaces: Map<string, string>): string
 }
 
 /**
- * Filtra propiedades que son tipos simples de XML Schema
+ * Compila el template Handlebars y genera el código del componente
  */
-function isSimpleXmlSchemaType(key: string, requestTypeObject: RequestTypeObject): boolean {
-    return typeof requestTypeObject[key]?.type === 'string' &&
-        requestTypeObject[key]!.type.includes(XML_SCHEMA_URI);
-}
-
-/**
- * Filtra propiedades que deben generar interfaces complejas
- */
-function shouldCreateInterface(key: string, requestTypeObject: RequestTypeObject): boolean {
-    return key !== NAMESPACE_KEY &&
-        !isSimpleXmlSchemaType(key, requestTypeObject);
-}
-
-/**
- * Genera el contenido de imports y declaraciones de namespaces
- */
-function generateImportsAndNamespaces(namespacesMapping: Record<string, string[]>): string {
-    return `import { soap } from "@xml-runtime/soap";
-import { ns } from "@xml-runtime/ns";
-
-${generateNamespacesCode(namespacesMapping)}
-`;
-}
-
-/**
- * Genera los tipos TypeScript simples
- */
-function generateSimpleTypes(requestTypeObject: RequestTypeObject): string {
-    return Object.keys(requestTypeObject)
-        .filter(key => isSimpleXmlSchemaType(key, requestTypeObject))
-        .map(key => generateTypeCode(key, requestTypeObject[key]!))
-        .join(';\n') + '\n';
-}
-
-/**
- * Genera el contenido de interfaces TypeScript
- */
-function generateInterfaces(requestType: string, requestTypeObject: RequestTypeObject): string {
-    const propsInterface = generatePropsInterfaceCode(requestType, requestTypeObject);
+function compileTemplate(templateData: any): string {
+    // Registrar helpers de Handlebars
+    registerHandlebarsHelpers();
     
-    const complexInterfaces = Object.keys(requestTypeObject)
-        .filter(key => shouldCreateInterface(key, requestTypeObject))
-        .map(key => {
-            // requestTypeObject[key] ya tiene la estructura correcta { type: TypeObject, ... }
-            return generateInterfaceCode(key, requestTypeObject[key] as any);
-        })
-        .join('');
+    // Cargar el template
+    const templatePath = path.join(__dirname, 'templates', 'component.hbs');
+    const templateSource = fs.readFileSync(templatePath, 'utf-8');
+    const template = Handlebars.compile(templateSource);
     
-    return propsInterface + complexInterfaces;
-}
-
-/**
- * Genera los atributos xmlns para el elemento Envelope
- */
-function generateXmlnsAttributes(namespacesPrefixMapping: Record<string, string>): string {
-    return Object.keys(namespacesPrefixMapping)
-        .map(key => `xmlns:${key}="${namespacesPrefixMapping[key]}"`)
-        .join(' ');
-}
-
-/**
- * Genera el contenido del componente TSX
- */
-function generateComponentContent(
-    requestType: string,
-    soapNamespaceURI: string,
-    namespacesPrefixMapping: Record<string, string>,
-    baseNamespacePrefix: string,
-    namespacesTypeMapping: Record<string, { uri: string; prefix: string }>,
-    requestTypeObject: RequestTypeObject
-): string {
-    const xmlnsAttributes = generateXmlnsAttributes(namespacesPrefixMapping);
-    const xmlBody = generateXmlBodyCode(
-        baseNamespacePrefix,
-        namespacesTypeMapping,
-        requestType,
-        requestTypeObject
-    );
-    
-    return `export function ${toPascalCase(requestType)}(props: ${toPascalCase(requestType)}Props) {
-    return <soap.Envelope xmlns:soap="${soapNamespaceURI}"
-    ${xmlnsAttributes}>
-    <soap.Header />
-    <soap.Body>
-    ${xmlBody}
-    </soap.Body>
-</soap.Envelope>
-}
-`;
+    // Compilar el template con los datos
+    return template(templateData);
 }
 
 /**
@@ -173,27 +95,29 @@ async function generateTsxFromWsdl(wsdlPath: string, outDir: string): Promise<vo
     const complexTypes = await complexTypesFromSchema(wsdlPath, schemaNode, namespaces);
     const schemaObject = schemaToObject(schemaNode, namespaces, complexTypes);
     const requestType = getRequestTypeFromDefinitions(definitionsNode, schemaObject);
-    const requestTypeObject = schemaObject[requestType] as RequestTypeObject;
+    const requestTypeObject = schemaObject[requestType] as any;
     
     const namespacesTagsMapping = extractNamespaceTagsMapping(requestType, requestTypeObject);
     const namespacesPrefixMapping = extractNamespacePrefixesMapping(requestType, requestTypeObject);
     const namespacesTypeMapping = extractNamespaceTypesMapping(requestType, requestTypeObject);
     const baseNamespacePrefix = namespacesTypeMapping[requestType]!.prefix;
     
-    const importContent = generateImportsAndNamespaces(namespacesTagsMapping);
-    const propsContent = generateSimpleTypes(requestTypeObject) + 
-                        generateInterfaces(requestType, requestTypeObject);
-    const xmlContent = generateComponentContent(
+    // Preparar datos estructurados para el template Handlebars
+    const templateData = prepareTemplateData(
         requestType,
-        soapNamespaceURI,
+        requestTypeObject,
+        namespacesTagsMapping,
         namespacesPrefixMapping,
-        baseNamespacePrefix,
         namespacesTypeMapping,
-        requestTypeObject
+        soapNamespaceURI,
+        baseNamespacePrefix
     );
     
+    // Compilar el template y generar el código
+    const generatedCode = compileTemplate(templateData);
+    
     const outputPath = `${outDir}/${requestType}.tsx`;
-    fs.writeFileSync(outputPath, importContent + propsContent + xmlContent);
+    fs.writeFileSync(outputPath, generatedCode);
     console.log(`Archivo ${requestType}.tsx generado correctamente en ${outDir}`);
 }
 

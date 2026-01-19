@@ -50,7 +50,7 @@ interface NamespaceTypesMapping {
     [name: string]: NamespaceInfo;
 }
 
-// Cache para memoización de extractNamespacePrefix
+// Cache para memoizaciรณn de extractNamespacePrefix
 const namespacePrefixCache = new Map<string, string>();
 
 // Cache para operaciones de split en strings
@@ -58,7 +58,7 @@ const stringSplitCache = new Map<string, string[]>();
 
 /**
  * Obtiene las claves de un objeto filtradas (sin NAMESPACE_KEY)
- * Cachea el resultado para evitar múltiples Object.keys() y filtros
+ * Cachea el resultado para evitar mรบltiples Object.keys() y filtros
  */
 function getFilteredKeys(obj: TypeObject | null | undefined): string[] {
     if (!obj || typeof obj !== 'object') return [];
@@ -118,17 +118,17 @@ function createInterfacePropertyCode(prop: string, props: { type: TypeObject } &
 }
 
 /**
- * Filtra propiedades válidas para una interfaz TypeScript
+ * Filtra propiedades vรกlidas para una interfaz TypeScript
  */
 function isValidInterfaceProperty(prop: string, props: Record<string, any>): boolean {
     if (prop.includes('$')) return false;
     if (prop === 'minOccurs' || prop === 'maxOccurs') return false;
     if (prop === NAMESPACE_KEY) return false;
     if (/^[0-9]*$/.test(prop)) return false;
-    // En el código original se accede a props[prop]
-    // Esta condición filtra propiedades cuyo tipo es un string simple de XML Schema
-    // Solo aplica cuando la propiedad está directamente en el nivel superior (no dentro de type)
-    // Dentro de interfaces complejas (cuando accedemos a props.type[prop]), estas propiedades SÍ deben incluirse
+    // En el cรณdigo original se accede a props[prop]
+    // Esta condiciรณn filtra propiedades cuyo tipo es un string simple de XML Schema
+    // Solo aplica cuando la propiedad estรก directamente en el nivel superior (no dentro de type)
+    // Dentro de interfaces complejas (cuando accedemos a props.type[prop]), estas propiedades Sร� deben incluirse
     const propDef = props[prop];
     if (propDef && typeof propDef.type === 'string' && propDef.type.includes(XML_SCHEMA_URI) && !props.type) {
         return false;
@@ -138,7 +138,7 @@ function isValidInterfaceProperty(prop: string, props: Record<string, any>): boo
 }
 
 /**
- * Genera el código de la interfaz de props para el componente principal
+ * Genera el cรณdigo de la interfaz de props para el componente principal
  */
 export function generatePropsInterfaceCode(typeName: string, typeObject: TypeObject): string {
     const keys = getFilteredKeys(typeObject);
@@ -153,7 +153,7 @@ ${props}
 }
 
 /**
- * Genera el código de un tipo TypeScript simple
+ * Genera el cรณdigo de un tipo TypeScript simple
  */
 export function generateTypeCode(typeName: string, typeDefinition: TypeDefinition): string {
     const parts = cachedSplit(typeDefinition.type as string, ':');
@@ -166,11 +166,11 @@ export type ${toPascalCase(typeName)} = ${tsType}
 }
 
 /**
- * Genera el código de una interfaz TypeScript completa
+ * Genera el cรณdigo de una interfaz TypeScript completa
  */
 export function generateInterfaceCode(interfaceName: string, interfaceDefinition: { type: TypeObject } & Record<string, any>): string {
-    // El objeto puede tener las propiedades directamente además de en type
-    // En el código original, se pasa el objeto completo a isValidInterfaceProperty
+    // El objeto puede tener las propiedades directamente ademรกs de en type
+    // En el cรณdigo original, se pasa el objeto completo a isValidInterfaceProperty
     const keys = Object.keys(interfaceDefinition.type);
     const properties = keys
         .filter(prop => isValidInterfaceProperty(prop, interfaceDefinition))
@@ -207,7 +207,7 @@ function extractTagNames(baseObject: TypeObject): string[] {
 
 /**
  * Extrae el prefijo de namespace de una URI
- * Optimizado: usa memoización para evitar recalcular el mismo namespace
+ * Optimizado: usa memoizaciรณn para evitar recalcular el mismo namespace
  */
 function extractNamespacePrefix(namespace: string): string {
     if (namespacePrefixCache.has(namespace)) {
@@ -232,7 +232,7 @@ function extractNamespacePrefix(namespace: string): string {
 
 /**
  * Extrae un objeto que mapea prefijos de namespace a arrays de nombres de tags
- * Optimizado: combina extracción de tags con iteración principal y usa push()
+ * Optimizado: combina extracciรณn de tags con iteraciรณn principal y usa push()
  */
 export function extractNamespaceTagsMapping(baseTypeName: string, baseTypeObject: TypeObject): NamespaceTagsMapping {
     const namespacesMapping: NamespaceTagsMapping = {};
@@ -290,7 +290,7 @@ export function extractNamespacePrefixesMapping(baseTypeName: string, baseTypeOb
 }
 
 /**
- * Aplana recursivamente las claves de un objeto base con información de namespace
+ * Aplana recursivamente las claves de un objeto base con informaciรณn de namespace
  * Optimizado: usa push() en lugar de spread operator
  */
 function flattenTypeKeys(typeObject: TypeObject, currentNamespace: string, currentNamespacePrefix: string): Array<{ name: string; uri: string; prefix: string }> {
@@ -325,7 +325,7 @@ function flattenTypeKeys(typeObject: TypeObject, currentNamespace: string, curre
 }
 
 /**
- * Extrae un objeto que mapea nombres de tipos a información de namespace (URI y prefijo)
+ * Extrae un objeto que mapea nombres de tipos a informaciรณn de namespace (URI y prefijo)
  */
 export function extractNamespaceTypesMapping(baseTypeName: string, baseTypeObject: TypeObject): NamespaceTypesMapping {
     const namespacesMapping: NamespaceTypesMapping = {};
@@ -349,7 +349,7 @@ export function extractNamespaceTypesMapping(baseTypeName: string, baseTypeObjec
 }
 
 /**
- * Genera el código de declaraciones de namespaces
+ * Genera el cรณdigo de declaraciones de namespaces
  */
 export function generateNamespacesCode(namespacesMapping: NamespaceTagsMapping): string {
     const keys = Object.keys(namespacesMapping);
@@ -374,7 +374,7 @@ function getNamespacePrefix(namespacesTypeMapping: NamespaceTypesMapping, baseNa
 }
 
 /**
- * Genera el código del template de una propiedad del cuerpo XML
+ * Genera el cรณdigo del template de una propiedad del cuerpo XML
  */
 function generateXmlPropertyCode(
     namespacesTypeMapping: NamespaceTypesMapping,
@@ -415,7 +415,7 @@ function generateXmlPropertyCode(
 }
 
 /**
- * Genera el código del cuerpo XML principal
+ * Genera el cรณdigo del cuerpo XML principal
  */
 export function generateXmlBodyCode(baseNamespacePrefix: string, namespacesTypeMapping: NamespaceTypesMapping, baseTypeName: string, baseTypeObject: TypeObject): string {
     const keys = getFilteredKeys(baseTypeObject);
@@ -431,4 +431,145 @@ export function generateXmlBodyCode(baseNamespacePrefix: string, namespacesTypeM
     return `<${baseNamespacePrefix}.${baseTypeName}>
     ${properties}
 </${baseNamespacePrefix}.${baseTypeName}>`;
+}
+
+// ============================================================================
+// Funciones para preparar datos estructurados para Handlebars
+// ============================================================================
+
+export interface SimpleTypeData {
+    name: string;
+    tsType: string;
+}
+
+export interface InterfacePropertyData {
+    name: string;
+    type: string;
+    modifier: string;
+}
+
+export interface InterfaceData {
+    name: string;
+    properties: InterfacePropertyData[];
+}
+
+export interface PropsInterfaceData {
+    name: string;
+    properties: Array<{ name: string; modifier?: string }>;
+}
+
+export interface TemplateData {
+    requestType: string;
+    namespaces: Record<string, string[]>;
+    simpleTypes: SimpleTypeData[];
+    propsInterface: PropsInterfaceData;
+    interfaces: InterfaceData[];
+    soapNamespaceURI: string;
+    xmlnsAttributes: Record<string, string>;
+    xmlBody: string;
+}
+
+/**
+ * Prepara datos de tipos simples para el template
+ */
+export function prepareSimpleTypesData(requestTypeObject: TypeObject, xmlSchemaUri: string): SimpleTypeData[] {
+    return Object.keys(requestTypeObject)
+        .filter(key => {
+            const typeDef = requestTypeObject[key]!;
+            return typeof typeDef.type === 'string' && typeDef.type.includes(xmlSchemaUri);
+        })
+        .map(key => {
+            const typeDef = requestTypeObject[key]!;
+            const parts = cachedSplit(typeDef.type as string, ':');
+            const xmlSchemaTypeName = parts[parts.length - 1]!;
+            const tsType = XML_SCHEMA_TYPES[xmlSchemaTypeName];
+            return {
+                name: key,
+                tsType: tsType,
+            };
+        });
+}
+
+/**
+ * Prepara datos de la interfaz de props para el template
+ */
+export function preparePropsInterfaceData(typeName: string, typeObject: TypeObject): PropsInterfaceData {
+    const keys = getFilteredKeys(typeObject);
+    const properties = keys.map(key => ({
+        name: key,
+    }));
+    
+    return {
+        name: typeName,
+        properties,
+    };
+}
+
+/**
+ * Prepara datos de una interfaz TypeScript para el template
+ */
+export function prepareInterfaceData(interfaceName: string, interfaceDefinition: { type: TypeObject } & Record<string, any>): InterfaceData {
+    const keys = Object.keys(interfaceDefinition.type);
+    const properties = keys
+        .filter(prop => isValidInterfaceProperty(prop, interfaceDefinition))
+        .map(prop => {
+            const childrenField = interfaceDefinition.type[prop]!;
+            const xmlSchemaType = extractXmlSchemaType(childrenField.type as string);
+            const childrenType = XML_SCHEMA_TYPES[xmlSchemaType] ?? 'string';
+            const propConfig = interfaceDefinition[prop] || childrenField;
+            const modifier = getTypeModifier(propConfig);
+            
+            return {
+                name: prop,
+                type: childrenType,
+                modifier,
+            };
+        });
+    
+    return {
+        name: interfaceName,
+        properties,
+    };
+}
+
+/**
+ * Prepara datos de todas las interfaces complejas para el template
+ */
+export function prepareInterfacesData(requestTypeObject: TypeObject, namespaceKey: string, xmlSchemaUri: string): InterfaceData[] {
+    return Object.keys(requestTypeObject)
+        .filter(key => {
+            if (key === namespaceKey) return false;
+            const typeDef = requestTypeObject[key]!;
+            return !(typeof typeDef.type === 'string' && typeDef.type.includes(xmlSchemaUri));
+        })
+        .map(key => prepareInterfaceData(key, requestTypeObject[key] as any));
+}
+
+/**
+ * Prepara todos los datos para el template Handlebars
+ */
+export function prepareTemplateData(
+    requestType: string,
+    requestTypeObject: TypeObject,
+    namespacesTagsMapping: NamespaceTagsMapping,
+    namespacesPrefixMapping: NamespacePrefixesMapping,
+    namespacesTypeMapping: NamespaceTypesMapping,
+    soapNamespaceURI: string,
+    baseNamespacePrefix: string
+): TemplateData {
+    const simpleTypes = prepareSimpleTypesData(requestTypeObject, XML_SCHEMA_URI);
+    const propsInterface = preparePropsInterfaceData(requestType, requestTypeObject);
+    const interfaces = prepareInterfacesData(requestTypeObject, NAMESPACE_KEY, XML_SCHEMA_URI);
+    const xmlBody = generateXmlBodyCode(baseNamespacePrefix, namespacesTypeMapping, requestType, requestTypeObject);
+    
+    return {
+        requestType,
+        namespaces: namespacesTagsMapping,
+        simpleTypes,
+        propsInterface,
+        interfaces,
+        soapNamespaceURI,
+        xmlnsAttributes: namespacesPrefixMapping,
+        xmlBody,
+    };
 }
