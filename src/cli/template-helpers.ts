@@ -1,5 +1,6 @@
 import Handlebars from "handlebars";
 import { toPascalCase, toCamelCase } from "./util.js";
+import { cachedSplit } from "./template.js";
 
 const XML_SCHEMA_TYPES: Record<string, string> = {
     'string': 'string',
@@ -21,10 +22,14 @@ const XML_SCHEMA_TYPES: Record<string, string> = {
 
 const DEFAULT_OCCURS = '1';
 
+// Flag para evitar registro repetido de helpers
+let helpersRegistered = false;
+
 /**
  * Registra todos los helpers personalizados de Handlebars
  */
 export function registerHandlebarsHelpers(): void {
+    if (helpersRegistered) return;
     // Helper para convertir a PascalCase
     Handlebars.registerHelper('pascalCase', (str: string) => {
         return toPascalCase(str);
@@ -51,7 +56,7 @@ export function registerHandlebarsHelpers(): void {
 
     // Helper para extraer y mapear tipos de XML Schema
     Handlebars.registerHelper('xmlSchemaType', (type: string) => {
-        const parts = type.split(':');
+        const parts = cachedSplit(type, ':');
         const xmlSchemaTypeName = parts[parts.length - 1]!;
         return XML_SCHEMA_TYPES[xmlSchemaTypeName] ?? 'string';
     });
@@ -126,4 +131,6 @@ export function registerHandlebarsHelpers(): void {
     Handlebars.registerHelper('exists', (value: any) => {
         return value !== undefined && value !== null;
     });
+    
+    helpersRegistered = true;
 }

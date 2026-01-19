@@ -56,20 +56,29 @@ const namespacePrefixCache = new Map<string, string>();
 // Cache para operaciones de split en strings
 const stringSplitCache = new Map<string, string[]>();
 
+// Cache para claves filtradas usando WeakMap (permite garbage collection automática)
+const filteredKeysCache = new WeakMap<TypeObject, string[]>();
+
 /**
  * Obtiene las claves de un objeto filtradas (sin NAMESPACE_KEY)
  * Cachea el resultado para evitar mรบltiples Object.keys() y filtros
  */
 function getFilteredKeys(obj: TypeObject | null | undefined): string[] {
     if (!obj || typeof obj !== 'object') return [];
-    const keys = Object.keys(obj);
-    return keys.filter(key => key !== NAMESPACE_KEY);
+    
+    if (filteredKeysCache.has(obj)) {
+        return filteredKeysCache.get(obj)!;
+    }
+    
+    const keys = Object.keys(obj).filter(key => key !== NAMESPACE_KEY);
+    filteredKeysCache.set(obj, keys);
+    return keys;
 }
 
 /**
  * Cachea el resultado de split para strings que se usan frecuentemente
  */
-function cachedSplit(str: string, separator: string): string[] {
+export function cachedSplit(str: string, separator: string): string[] {
     const cacheKey = `${str}${separator}`;
     if (stringSplitCache.has(cacheKey)) {
         return stringSplitCache.get(cacheKey)!;
@@ -346,6 +355,138 @@ export function extractNamespaceTypesMapping(baseTypeName: string, baseTypeObjec
     }
     
     return namespacesMapping;
+}
+
+/**
+ * Interfaz para los mappings combinados de namespace
+ */
+export interface CombinedNamespaceMappings {
+    tagsMapping: NamespaceTagsMapping;
+    prefixesMapping: NamespacePrefixesMapping;
+    typesMapping: NamespaceTypesMapping;
+}
+
+/**
+ * Extrae todos los mappings de namespace en una sola pasada sobre los datos
+ * Optimización: combina extractNamespaceTagsMapping, extractNamespacePrefixesMapping
+ * y extractNamespaceTypesMapping en una sola iteración
+ */
+export function extractAllNamespaceMappings(
+    baseTypeName: string,
+    baseTypeObject: TypeObject
+): CombinedNamespaceMappings {
+    const tagsMapping: NamespaceTagsMapping = {};
+    const prefixesMapping: NamespacePrefixesMapping = {};
+    const typesMapping: NamespaceTypesMapping = {};
+    
+    const baseNamespace = baseTypeObject[NAMESPACE_KEY]!;
+    const baseNamespacePrefix = extractNamespacePrefix(baseNamespace);
+    
+    // Inicializar mappings base
+    tagsMapping[baseNamespacePrefix] = [baseTypeName];
+    prefixesMapping[baseNamespacePrefix] = baseNamespace;
+    typesMapping[baseTypeName] = {
+        uri: baseNamespace,
+        prefix: baseNamespacePrefix,
+    };
+    
+    const keys = getFilteredKeys(baseTypeObject);
+    
+    // Función auxiliar recursiva para extraer tags anidados
+    const extractNestedTags = (typeObject: TypeObject): string[] => {
+        const result: string[] = [];
+        const nestedKeys = getFilteredKeys(typeObject);
+        
+        for (const nestedKey of nestedKeys) {
+            const nestedElement = typeObject[nestedKey]!;
+            if (typeof nestedElement?.type === 'object') {
+                const nestedTags = extractNestedTags(nestedElement.type as TypeObject);
+                result.push(...nestedTags);
+            } else {
+                result.push(nestedKey);
+            }
+        }
+        
+        return result;
+    };
+    
+    // Función auxiliar recursiva para aplanar claves con información de namespace
+    const flattenKeys = (
+        typeObject: TypeObject,
+        currentNamespace: string,
+        currentNamespacePrefix: string
+    ): Array<{ name: string; uri: string; prefix: string }> => {
+        const result: Array<{ name: string; uri: string; prefix: string }> = [];
+        const objKeys = getFilteredKeys(typeObject);
+        
+        for (const objKey of objKeys) {
+            const objElement = typeObject[objKey]!;
+            
+            if (typeof objElement?.type === 'object') {
+                const objNamespace = (objElement.type as TypeObject)[NAMESPACE_KEY]!;
+                const objNamespacePrefix = extractNamespacePrefix(objNamespace);
+                
+                const nested = flattenKeys(objElement.type as TypeObject, objNamespace, objNamespacePrefix);
+                result.push(...nested);
+                
+                result.push({
+                    name: objKey,
+                    uri: objNamespace,
+                    prefix: objNamespacePrefix,
+                });
+            } else {
+                result.push({
+                    name: objKey,
+                    uri: currentNamespace,
+                    prefix: currentNamespacePrefix,
+                });
+            }
+        }
+        
+        return result;
+    };
+    
+    // Una sola iteración sobre las claves principales
+    for (const key of keys) {
+        const element = baseTypeObject[key]!;
+        let namespace = key;
+        const tagNames = [key];
+        
+        if (typeof element?.type === 'object') {
+            namespace = (element.type as TypeObject)[NAMESPACE_KEY]!;
+            const nestedTags = extractNestedTags(element.type as TypeObject);
+            tagNames.push(...nestedTags);
+        }
+        
+        const namespacePrefix = extractNamespacePrefix(namespace);
+        
+        // Actualizar tagsMapping
+        if (tagsMapping[namespacePrefix] === undefined) {
+            tagsMapping[namespacePrefix] = tagNames;
+        } else {
+            tagsMapping[namespacePrefix]!.push(...tagNames);
+        }
+        
+        // Actualizar prefixesMapping
+        if (prefixesMapping[namespacePrefix] === undefined) {
+            prefixesMapping[namespacePrefix] = namespace;
+        }
+    }
+    
+    // Construir typesMapping usando flattenKeys
+    const flatKeys = flattenKeys(baseTypeObject, baseNamespace, baseNamespacePrefix);
+    for (const item of flatKeys) {
+        typesMapping[item.name] = {
+            uri: item.uri,
+            prefix: item.prefix,
+        };
+    }
+    
+    return {
+        tagsMapping,
+        prefixesMapping,
+        typesMapping,
+    };
 }
 
 /**
