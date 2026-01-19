@@ -1,6 +1,7 @@
 {
     "name": "tsx-to-xml",
     "devDependencies": {
+        "@types/node": "25.0.9",
         "esbuild": "^0.21.0",
         "fast-xml-parser": "^5.3.2",
         "handlebars": "^4.7.8",

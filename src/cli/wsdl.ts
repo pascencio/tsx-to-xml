@@ -82,7 +82,7 @@ const processSingleElement = (node: XmlNode, namespaces: Map<string, string>, co
     // Manejar elementos con complexType inline
     if (node.complexType !== undefined || node['xsd:complexType'] !== undefined) {
         const complexTypeNode = node.complexType || node['xsd:complexType'];
-        const inlineType = complexTypeToObject(complexTypeNode, namespaces, complexTypes, targetNamespace);
+        const inlineType = complexTypeToObject(complexTypeNode, namespaces, complexTypes ?? {}, targetNamespace);
         return inlineType;
     }
     
@@ -675,47 +675,6 @@ export const getNamespacesFromNode = (node: XmlNode): Map<string, string> => {
         if (match !== null) {
             const value = node[key];
             namespaces.set(match[1]!, value);
-        }
-    }
-    return namespaces;
-};
-
-export const getAllNamespaces = (wsdlRoot: XmlNode): Map<string, string> => {
-    const namespaces = new Map<string, string>();
-    const definitionsNode = getDefinitionsNode(wsdlRoot) ?? {};
-    namespaces.set('targetNamespace', definitionsNode.targetNamespace!);
-    for (const key of Object.keys(definitionsNode)) {
-        const match = key.match(/xmlns:([a-zA-z0-9]*)/);
-        if (match !== null) {
-            const value = definitionsNode[key];
-            namespaces.set(match[1]!, value);
-        }
-    }
-    const typeNode = getTypesNode(definitionsNode) ?? {};
-    for (const key of Object.keys(typeNode)) {
-        const match = key.match(/xmlns:([a-zA-z0-9]*)/);
-        if (match !== null) {
-            const value = typeNode[key];
-            namespaces.set(match[1]!, value);
-        }
-    }
-    const schemaNode = getSchemaNode(typeNode) ?? {};
-    for (const key of Object.keys(schemaNode)) {
-        const match = key.match(/xmlns:([a-zA-z0-9]*)/);
-        if (match !== null) {
-            const value = schemaNode[key];
-            namespaces.set(match[1]!, value);
-        }
-    }
-    const importNode = getImportNode(schemaNode);
-    if (importNode) {
-        const importObj = Array.isArray(importNode) ? importNode[0] : importNode;
-        for (const key of Object.keys(importObj)) {
-            const match = key.match(/xmlns:([a-zA-z0-9]*)/);
-            if (match !== null) {
-                const value = importObj[key];
-                namespaces.set(match[1]!, value);
-            }
         }
     }
     return namespaces;

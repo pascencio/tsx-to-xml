@@ -28,15 +28,6 @@ let templateSource: string | null = null;
 const SOAP12_ENVELOPE_URI = 'http://www.w3.org/2003/05/soap-envelope';
 const SOAP11_ENVELOPE_URI = 'http://schemas.xmlsoap.org/soap/envelope/';
 
-interface RequestTypeObject {
-    [key: string]: {
-        type: string | any;
-        maxOccurs?: string;
-        minOccurs?: string;
-    };
-    $namespace?: string;
-}
-
 /**
  * Determina la URI del namespace SOAP basado en las definiciones del WSDL
  */

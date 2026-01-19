@@ -29,7 +29,7 @@ interface TypeDefinition {
 }
 
 interface TypeObject {
-    [key: string]: TypeDefinition;
+    [key: string]: TypeDefinition | string | undefined;
     $namespace?: string;
 }
 
@@ -117,6 +117,9 @@ function getTypeModifier(propConfig?: TypeDefinition): string {
  */
 function createInterfacePropertyCode(prop: string, props: { type: TypeObject } & Record<string, any>): string {
     const childrenField = props.type[prop]!;
+    if (typeof childrenField === 'string') {
+        return `\t${toCamelCase(prop)}: string`;
+    }
     const xmlSchemaType = extractXmlSchemaType(childrenField.type as string);
     const childrenType = XML_SCHEMA_TYPES[xmlSchemaType] ?? 'string';
     // props[prop] puede tener maxOccurs/minOccurs si existe directamente en props
@@ -146,73 +149,7 @@ function isValidInterfaceProperty(prop: string, props: Record<string, any>): boo
     return true;
 }
 
-/**
- * Genera el cรณdigo de la interfaz de props para el componente principal
- */
-export function generatePropsInterfaceCode(typeName: string, typeObject: TypeObject): string {
-    const keys = getFilteredKeys(typeObject);
-    const props = keys
-        .map(key => `\t${toCamelCase(key)}: ${key}`)
-        .join(',\n');
-    
-    return `export interface ${toPascalCase(typeName)}Props {
-${props}
-}
-`;
-}
 
-/**
- * Genera el cรณdigo de un tipo TypeScript simple
- */
-export function generateTypeCode(typeName: string, typeDefinition: TypeDefinition): string {
-    const parts = cachedSplit(typeDefinition.type as string, ':');
-    const xmlSchemaTypeName = parts[parts.length - 1]!;
-    const tsType = XML_SCHEMA_TYPES[xmlSchemaTypeName];
-    
-    return `
-export type ${toPascalCase(typeName)} = ${tsType}
-`;
-}
-
-/**
- * Genera el cรณdigo de una interfaz TypeScript completa
- */
-export function generateInterfaceCode(interfaceName: string, interfaceDefinition: { type: TypeObject } & Record<string, any>): string {
-    // El objeto puede tener las propiedades directamente ademรกs de en type
-    // En el cรณdigo original, se pasa el objeto completo a isValidInterfaceProperty
-    const keys = Object.keys(interfaceDefinition.type);
-    const properties = keys
-        .filter(prop => isValidInterfaceProperty(prop, interfaceDefinition))
-        .map(prop => createInterfacePropertyCode(prop, interfaceDefinition))
-        .join(',\n');
-    
-    return `
-export interface ${toPascalCase(interfaceName)} {
-${properties}
-}
-`;
-}
-
-/**
- * Extrae nombres de tags recursivamente de un objeto base
- * Optimizado: usa push() en lugar de spread operator
- */
-function extractTagNames(baseObject: TypeObject): string[] {
-    const result: string[] = [];
-    const keys = getFilteredKeys(baseObject);
-    
-    for (const key of keys) {
-        const element = baseObject[key]!;
-        if (typeof element?.type === 'object') {
-            const nestedTags = extractTagNames(element.type as TypeObject);
-            result.push(...nestedTags);
-        } else {
-            result.push(key);
-        }
-    }
-    
-    return result;
-}
 
 /**
  * Extrae el prefijo de namespace de una URI
@@ -239,123 +176,6 @@ function extractNamespacePrefix(namespace: string): string {
     return prefix;
 }
 
-/**
- * Extrae un objeto que mapea prefijos de namespace a arrays de nombres de tags
- * Optimizado: combina extracciรณn de tags con iteraciรณn principal y usa push()
- */
-export function extractNamespaceTagsMapping(baseTypeName: string, baseTypeObject: TypeObject): NamespaceTagsMapping {
-    const namespacesMapping: NamespaceTagsMapping = {};
-    const baseNamespacePrefix = extractNamespacePrefix(baseTypeObject[NAMESPACE_KEY]!);
-    namespacesMapping[baseNamespacePrefix] = [baseTypeName];
-    
-    const keys = getFilteredKeys(baseTypeObject);
-    
-    for (const key of keys) {
-        const element = baseTypeObject[key]!;
-        let namespace = key;
-        const tagNames = [key];
-        
-        if (typeof element?.type === 'object') {
-            namespace = (element.type as TypeObject)[NAMESPACE_KEY]!;
-            const nestedTags = extractTagNames(element.type as TypeObject);
-            tagNames.push(...nestedTags);
-        }
-        
-        const namespacePrefix = extractNamespacePrefix(namespace);
-        
-        if (namespacesMapping[namespacePrefix] === undefined) {
-            namespacesMapping[namespacePrefix] = tagNames;
-        } else {
-            namespacesMapping[namespacePrefix]!.push(...tagNames);
-        }
-    }
-    
-    return namespacesMapping;
-}
-
-/**
- * Extrae un objeto que mapea prefijos de namespace a URIs de namespace
- */
-export function extractNamespacePrefixesMapping(baseTypeName: string, baseTypeObject: TypeObject): NamespacePrefixesMapping {
-    const namespacesMapping: NamespacePrefixesMapping = {};
-    const baseNamespacePrefix = extractNamespacePrefix(baseTypeObject[NAMESPACE_KEY]!);
-    namespacesMapping[baseNamespacePrefix] = baseTypeObject[NAMESPACE_KEY]!;
-    
-    const keys = getFilteredKeys(baseTypeObject);
-    
-    for (const key of keys) {
-        const element = baseTypeObject[key]!;
-        const namespace = typeof element?.type === 'object' 
-            ? (element.type as TypeObject)[NAMESPACE_KEY]! 
-            : key;
-        const namespacePrefix = extractNamespacePrefix(namespace);
-        
-        if (namespacesMapping[namespacePrefix] === undefined) {
-            namespacesMapping[namespacePrefix] = namespace;
-        }
-    }
-    
-    return namespacesMapping;
-}
-
-/**
- * Aplana recursivamente las claves de un objeto base con informaciรณn de namespace
- * Optimizado: usa push() en lugar de spread operator
- */
-function flattenTypeKeys(typeObject: TypeObject, currentNamespace: string, currentNamespacePrefix: string): Array<{ name: string; uri: string; prefix: string }> {
-    const result: Array<{ name: string; uri: string; prefix: string }> = [];
-    const keys = getFilteredKeys(typeObject);
-    
-    for (const key of keys) {
-        const element = typeObject[key]!;
-        
-        if (typeof element?.type === 'object') {
-            const namespace = (element.type as TypeObject)[NAMESPACE_KEY]!;
-            const namespacePrefix = extractNamespacePrefix(namespace);
-            
-            const nested = flattenTypeKeys(element.type as TypeObject, namespace, namespacePrefix);
-            result.push(...nested);
-            
-            result.push({
-                name: key,
-                uri: namespace,
-                prefix: namespacePrefix,
-            });
-        } else {
-            result.push({
-                name: key,
-                uri: currentNamespace,
-                prefix: currentNamespacePrefix,
-            });
-        }
-    }
-    
-    return result;
-}
-
-/**
- * Extrae un objeto que mapea nombres de tipos a informaciรณn de namespace (URI y prefijo)
- */
-export function extractNamespaceTypesMapping(baseTypeName: string, baseTypeObject: TypeObject): NamespaceTypesMapping {
-    const namespacesMapping: NamespaceTypesMapping = {};
-    const namespace = baseTypeObject[NAMESPACE_KEY]!;
-    const namespacePrefix = extractNamespacePrefix(namespace);
-    
-    namespacesMapping[baseTypeName] = {
-        uri: namespace,
-        prefix: namespacePrefix,
-    };
-    
-    const flatKeys = flattenTypeKeys(baseTypeObject, namespace, namespacePrefix);
-    for (const item of flatKeys) {
-        namespacesMapping[item.name] = {
-            uri: item.uri,
-            prefix: item.prefix,
-        };
-    }
-    
-    return namespacesMapping;
-}
 
 /**
  * Interfaz para los mappings combinados de namespace
@@ -368,8 +188,7 @@ export interface CombinedNamespaceMappings {
 
 /**
  * Extrae todos los mappings de namespace en una sola pasada sobre los datos
- * Optimización: combina extractNamespaceTagsMapping, extractNamespacePrefixesMapping
- * y extractNamespaceTypesMapping en una sola iteración
+ * Optimización: combina las tres extracciones (tags, prefixes, types) en una sola iteración
  */
 export function extractAllNamespaceMappings(
     baseTypeName: string,
@@ -399,7 +218,7 @@ export function extractAllNamespaceMappings(
         
         for (const nestedKey of nestedKeys) {
             const nestedElement = typeObject[nestedKey]!;
-            if (typeof nestedElement?.type === 'object') {
+            if (typeof nestedElement === 'object' && nestedElement !== null && typeof nestedElement.type === 'object') {
                 const nestedTags = extractNestedTags(nestedElement.type as TypeObject);
                 result.push(...nestedTags);
             } else {
@@ -422,7 +241,7 @@ export function extractAllNamespaceMappings(
         for (const objKey of objKeys) {
             const objElement = typeObject[objKey]!;
             
-            if (typeof objElement?.type === 'object') {
+            if (typeof objElement === 'object' && objElement !== null && typeof objElement.type === 'object') {
                 const objNamespace = (objElement.type as TypeObject)[NAMESPACE_KEY]!;
                 const objNamespacePrefix = extractNamespacePrefix(objNamespace);
                 
@@ -452,7 +271,7 @@ export function extractAllNamespaceMappings(
         let namespace = key;
         const tagNames = [key];
         
-        if (typeof element?.type === 'object') {
+        if (typeof element === 'object' && element !== null && typeof element.type === 'object') {
             namespace = (element.type as TypeObject)[NAMESPACE_KEY]!;
             const nestedTags = extractNestedTags(element.type as TypeObject);
             tagNames.push(...nestedTags);
@@ -492,18 +311,6 @@ export function extractAllNamespaceMappings(
 /**
  * Genera el cรณdigo de declaraciones de namespaces
  */
-export function generateNamespacesCode(namespacesMapping: NamespaceTagsMapping): string {
-    const keys = Object.keys(namespacesMapping);
-    return keys
-        .map(key => {
-            const tagNames = namespacesMapping[key]!
-                .map(tag => `"${tag}"`)
-                .join(', ');
-            return `const ${key} = ns("${key}", [${tagNames}] as const);`;
-        })
-        .join('\n');
-}
-
 /**
  * Obtiene el prefijo de namespace para un elemento
  */
@@ -531,16 +338,23 @@ function generateXmlPropertyCode(
         parentKey
     );
     
-    if (typeof elementObject?.type === 'object') {
+    if (typeof elementObject === 'object' && elementObject !== null && typeof elementObject.type === 'object') {
         const keys = getFilteredKeys(elementObject.type as TypeObject);
         const nestedProperties = keys
-            .map(elementKey => generateXmlPropertyCode(
-                namespacesTypeMapping,
-                baseNamespacePrefix,
-                elementKey,
-                (elementObject.type as TypeObject)[elementKey]!,
-                key
-            ))
+            .map(elementKey => {
+                const nestedElement = (elementObject.type as TypeObject)[elementKey]!;
+                if (typeof nestedElement === 'object' && nestedElement !== null) {
+                    return generateXmlPropertyCode(
+                        namespacesTypeMapping,
+                        baseNamespacePrefix,
+                        elementKey,
+                        nestedElement as TypeDefinition,
+                        key
+                    );
+                }
+                return '';
+            })
+            .filter(Boolean)
             .join('\n');
         
         return `<${namespacePrefix}.${key}>
@@ -561,12 +375,19 @@ function generateXmlPropertyCode(
 export function generateXmlBodyCode(baseNamespacePrefix: string, namespacesTypeMapping: NamespaceTypesMapping, baseTypeName: string, baseTypeObject: TypeObject): string {
     const keys = getFilteredKeys(baseTypeObject);
     const properties = keys
-        .map(key => generateXmlPropertyCode(
-            namespacesTypeMapping,
-            baseNamespacePrefix,
-            key,
-            baseTypeObject[key]!
-        ))
+        .map(key => {
+            const element = baseTypeObject[key]!;
+            if (typeof element === 'object' && element !== null) {
+                return generateXmlPropertyCode(
+                    namespacesTypeMapping,
+                    baseNamespacePrefix,
+                    key,
+                    element as TypeDefinition
+                );
+            }
+            return '';
+        })
+        .filter(Boolean)
         .join('\n');
     
     return `<${baseNamespacePrefix}.${baseTypeName}>
@@ -617,16 +438,22 @@ export function prepareSimpleTypesData(requestTypeObject: TypeObject, xmlSchemaU
     return Object.keys(requestTypeObject)
         .filter(key => {
             const typeDef = requestTypeObject[key]!;
-            return typeof typeDef.type === 'string' && typeDef.type.includes(xmlSchemaUri);
+            return typeof typeDef === 'object' && typeDef !== null && typeof typeDef.type === 'string' && typeDef.type.includes(xmlSchemaUri);
         })
         .map(key => {
             const typeDef = requestTypeObject[key]!;
-            const parts = cachedSplit(typeDef.type as string, ':');
-            const xmlSchemaTypeName = parts[parts.length - 1]!;
-            const tsType = XML_SCHEMA_TYPES[xmlSchemaTypeName];
+            if (typeof typeDef === 'object' && typeDef !== null && typeof typeDef.type === 'string') {
+                const parts = cachedSplit(typeDef.type, ':');
+                const xmlSchemaTypeName = parts[parts.length - 1]!;
+                const tsType = XML_SCHEMA_TYPES[xmlSchemaTypeName];
+                return {
+                    name: key,
+                    tsType: tsType,
+                };
+            }
             return {
                 name: key,
-                tsType: tsType,
+                tsType: 'string',
             };
         });
 }
@@ -655,6 +482,13 @@ export function prepareInterfaceData(interfaceName: string, interfaceDefinition:
         .filter(prop => isValidInterfaceProperty(prop, interfaceDefinition))
         .map(prop => {
             const childrenField = interfaceDefinition.type[prop]!;
+            if (typeof childrenField === 'string') {
+                return {
+                    name: prop,
+                    type: 'string',
+                    modifier: '',
+                };
+            }
             const xmlSchemaType = extractXmlSchemaType(childrenField.type as string);
             const childrenType = XML_SCHEMA_TYPES[xmlSchemaType] ?? 'string';
             const propConfig = interfaceDefinition[prop] || childrenField;
@@ -681,7 +515,10 @@ export function prepareInterfacesData(requestTypeObject: TypeObject, namespaceKe
         .filter(key => {
             if (key === namespaceKey) return false;
             const typeDef = requestTypeObject[key]!;
-            return !(typeof typeDef.type === 'string' && typeDef.type.includes(xmlSchemaUri));
+            if (typeof typeDef === 'object' && typeDef !== null && typeof typeDef.type === 'string') {
+                return !typeDef.type.includes(xmlSchemaUri);
+            }
+            return true;
         })
         .map(key => prepareInterfaceData(key, requestTypeObject[key] as any));
 }
